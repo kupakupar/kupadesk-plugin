@@ -1,0 +1,40 @@
+{
+  "name": "KupaDesk",
+  "version": "0.0.3",
+  "private": true,
+  "type": "module",
+  "main": "./index.mjs",
+  "description": "KupaDesk 本地提示词库：多份提示词、按模型应用、供应商与模型自动同步，沿用原供应商连接。",
+  "files": [
+    "index.mjs",
+    "catalog-sync.mjs",
+    "native-assets.mjs",
+    "kupadesk.middleware.js",
+    "page",
+    "README.md",
+    "settings-sync.mjs"
+  ],
+  "magpie": {
+    "middleware": "./kupadesk.middleware.js",
+    "page": {
+      "title": "KupaDesk",
+      "file": "page/index.html",
+      "icon": "page/kupadesk-native-003-icon.svg"
+    },
+    "permissions": [
+      "providers:list"
+    ],
+    "options": {
+      "schemaVersion": 1,
+      "enabled": false,
+      "bindings": [],
+      "catalogSync": {
+        "intervalMs": 10000
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kupakupar/kupadesk-plugin.git"
+  }
+}
