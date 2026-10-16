@@ -5,7 +5,7 @@ Magpie 原生提示词库插件。请求沿用原供应商；支持多份本地�
 在 Magpie 的插件安装框输入：
 
 ```text
-github:kupakupar/kupadesk-plugin#v0.0.4
+github:kupakupar/kupadesk-plugin
 ```
 
 通过 Magpie 现有的加密同步同步提示词名称、全文、模型绑定和开关。请在各设备配置同一同步账户和口令，并开启供应商同步。插件仅处理 Magpie 已下载并校验的本机加密同步缓存，不另外发送网络请求。
