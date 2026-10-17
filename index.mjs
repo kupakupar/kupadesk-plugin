@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { startCatalogSync } from './catalog-sync.mjs';
 import { startNativeAssets } from './native-assets.mjs';
 import { startSettingsSync } from './settings-sync.mjs';
+import { initializeRequestIndex } from './request-index.mjs';
 
 export default async function KupaDeskNativePage(input, options = {}) {
   const packageDir = fileURLToPath(new URL('.', import.meta.url));
@@ -13,6 +14,9 @@ export default async function KupaDeskNativePage(input, options = {}) {
         level: 'warn', message: code } })?.catch?.(() => {});
     } catch { /* Optional diagnostics must not block providers. */ }
   }
+  try {
+    if (input?.directory) await initializeRequestIndex(input.directory, packageDir);
+  } catch { log('request_index_initialization_failed'); }
   try {
     await startNativeAssets({ packageDir, log });
   } catch {

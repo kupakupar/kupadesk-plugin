@@ -1,4 +1,7 @@
-// Personal test plugin. Prompts/options are local plaintext, without cloud licensing.
+import { REQUEST_INDEX } from './request-index.js';
+import { selectBinding } from './model-match.js';
+
+// Prompts/options remain local. No license lease or remote prompt service.
 const START = "<!-- KUPADESK-NATIVE-PAGE-TEST:BEGIN -->";
 const END = "<!-- KUPADESK-NATIVE-PAGE-TEST:END -->";
 const MAX_PROMPT_CHARS = 32768;
@@ -87,9 +90,40 @@ function inject(body, protocol, block, roleChoice, model) {
   return body;
 }
 
+function alreadyApplied(body, protocol, block, roleChoice, model) {
+  let fields = [];
+  if (protocol === 'chat' && Array.isArray(body?.messages)) {
+    const developer = body.messages.some(m => m?.role === 'developer') || /(^|\/)(o1|o3|o4|gpt-5|gpt-6)/i.test(model);
+    const role = roleChoice === 'auto' ? (developer ? 'developer' : 'system') : roleChoice;
+    fields = body.messages.filter(m => m?.role === 'system' || m?.role === 'developer')
+      .map(m => ({content: m.content, eligible: m.role === role}));
+  } else if (protocol === 'responses') {
+    fields = [{content: body?.instructions, eligible: true}];
+    if (Array.isArray(body?.input)) fields = fields.concat(body.input
+      .filter(m => m?.role === 'system' || m?.role === 'developer').map(m => ({content: m.content, eligible: false})));
+  } else if (protocol === 'anthropic') fields = [{content: body?.system, eligible: true}];
+  else if (protocol === 'gemini') {
+    if (body?.systemInstruction && body?.system_instruction) return false;
+    fields = [{content: (body?.systemInstruction || body?.system_instruction)?.parts, eligible: true}];
+  }
+  let starts = 0, ends = 0, exact = false;
+  for (const field of fields) {
+    const parts = typeof field.content === 'string' ? [field.content] : Array.isArray(field.content)
+      ? field.content.filter(p => typeof p?.text === 'string').map(p => p.text) : [];
+    for (const text of parts) {
+      starts += text.split(START).length - 1;
+      ends += text.split(END).length - 1;
+      if (field.eligible && text.includes(block)) exact = true;
+    }
+  }
+  return starts === 1 && ends === 1 && exact;
+}
+
+function outcome(ctx, value) { if (ctx?.state) ctx.state.kupadeskOutcome = value; }
+
 export function onRequest(body, ctx) {
   const options = ctx && ctx.options;
-  if (!options || options.enabled !== true) return;
+  if (!options || options.enabled !== true) { outcome(ctx, 'disabled'); return; }
   const reject = message => {
     if (ctx && typeof ctx.reject === "function") return ctx.reject(400, message);
   };
@@ -97,18 +131,24 @@ export function onRequest(body, ctx) {
     if (options.schemaVersion !== 1 || !Array.isArray(options.bindings)) return reject("KupaDesk: invalid options schema.");
     const model = typeof ctx.model === "string" && ctx.model ? ctx.model : body && body.model;
     if (typeof model !== "string" || !model) return;
-    const matches = options.bindings.filter(b => b && b.enabled !== false && Array.isArray(b.models) && b.models.includes(model));
-    if (matches.length === 0) return;
-    if (matches.length !== 1 || matches[0].models.indexOf(model) !== matches[0].models.lastIndexOf(model)) return reject("KupaDesk: more than one prompt is bound to this model.");
-    const binding = matches[0];
+    let binding;
+    try { binding = selectBinding(options, model, ctx.modelIndex || REQUEST_INDEX); }
+    catch { outcome(ctx, 'invalid'); return reject('KupaDesk: model binding is ambiguous. Use a full model ID or bind the whole routing group to one prompt.'); }
+    if (!binding) { outcome(ctx, 'unbound'); return; }
     const prompt = binding.prompt;
     const role = binding.chatRole == null ? "auto" : binding.chatRole;
     if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS || prompt.includes(START) || prompt.includes(END) || !["auto", "system", "developer"].includes(role)) return reject("KupaDesk: invalid prompt binding.");
     if (!body || typeof body !== "object" || Array.isArray(body)) return reject("KupaDesk: invalid request body.");
-    // Work on a copy: errors must not leave a partially edited request behind.
-    const copy = JSON.parse(JSON.stringify(body));
-    return inject(copy, ctx.protocol, START + "\n" + prompt + "\n" + END, role, model);
+    const block = START + "\n" + prompt + "\n" + END;
+    if (alreadyApplied(body, ctx.protocol, block, role, model)) { outcome(ctx, 'already'); return; }
+    if (ctx.protocol === 'gemini' && body.systemInstruction && body.system_instruction) return reject('KupaDesk: request contains two conflicting system instruction fields.');
+    // Only instruction containers are copied by inject/cleanMessages. Avoid
+    // cloning megabytes of conversation history inside the Go JS time budget.
+    const result = inject({...body}, ctx.protocol, block, role, model);
+    outcome(ctx, 'injected');
+    return result;
   } catch (_) {
+    outcome(ctx, 'invalid');
     return reject("KupaDesk: unsupported or malformed instruction fields.");
   }
 }

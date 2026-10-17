@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
+import {buildRequestIndex, writeRequestIndex} from './request-index.mjs';
+import {injectionDiagnostics} from './diagnostics.mjs';
 
 const MAX_BYTES = 16 * 1024 * 1024;
 const MAX_MODELS = 50000;
@@ -69,7 +71,7 @@ async function providerMetadata(directory) {
     const id = text(row?.id);
     if (id) cached.set(id, text(row.name) || id);
   }
-  return { configured, cached };
+  return { configured, cached, providerRows: data?.providers ?? [], groupRows: data?.groups ?? [] };
 }
 
 export function normalizeCatalog(payload, metadata = {}) {
@@ -202,6 +204,7 @@ export function startCatalogSync({ directory, packageDir, options = {}, env = pr
       deadline.unref?.();
       const payload = await readModels(url, fetchImpl, controller.signal);
       const clean = normalizeCatalog(payload, names);
+      await writeRequestIndex(packageDir, buildRequestIndex(clean, names));
       last = { ...clean, importedAt: checkedAt };
     } catch (error) {
       if (stopped) return;
@@ -214,10 +217,11 @@ export function startCatalogSync({ directory, packageDir, options = {}, env = pr
     if (stopped) return;
     const content = { providers: last?.providers ?? [], models: last?.models ?? [] };
     const hash = revision(content);
-    const signature = `${hash}:${status}:${errorCode ?? ''}`;
+    const injection = injectionDiagnostics();
+    const signature = `${hash}:${status}:${errorCode ?? ''}:${JSON.stringify(injection)}`;
     if (signature === published && now() - lastWrite < HEARTBEAT_INTERVAL) return;
     const value = { schemaVersion: 1, mode: 'automatic', status, checkedAt,
-      importedAt: last?.importedAt ?? '', revision: hash, source: '当前 Magpie', ...content,
+      importedAt: last?.importedAt ?? '', revision: hash, source: '当前 Magpie', ...content, injection,
       ...(errorCode ? { errorCode } : {}) };
     try {
       await writeCatalog(file, value);

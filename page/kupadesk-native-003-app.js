@@ -6,7 +6,7 @@
   const assetNonce = new URL(document.currentScript?.src || location.href).searchParams.get('kupaAsset');
 
   const LIMIT_BYTES = 48 * 1024;
-  const PROMPT_LIMIT = 16000;
+  const PROMPT_LIMIT = 32768;
   const MODEL_RENDER_LIMIT = 200;
   const ROLES = new Set(['auto', 'system', 'developer']);
   const $ = id => document.getElementById(id);
@@ -63,7 +63,8 @@
         chatRole: ROLES.has(item.chatRole) ? item.chatRole : 'auto',
       };
     }) : [];
-    return { ...original, schemaVersion: 1, enabled: original.enabled === true, bindings };
+    return { ...original, schemaVersion: 1, enabled: original.enabled === true, bindings,
+      gatewayTimeoutMs: Number.isInteger(original.gatewayTimeoutMs) ? original.gatewayTimeoutMs : 5000 };
   }
 
   function parseModels(text) {
@@ -121,6 +122,12 @@
   function loadCatalog() {
     const raw = window.KUPADESK_MODEL_CATALOG;
     if (!raw || raw.schemaVersion !== 1 || !Array.isArray(raw.models)) throw new Error('CATALOG_UNAVAILABLE');
+    const check = raw.injection;
+    const outcomes = {injected: '已生成提示词注入', already: '已确认提示词存在', unbound: '此请求未绑定提示词', invalid: '注入检查失败，请检查模型绑定和插件错误'};
+    if (check?.last && outcomes[check.last.outcome]) {
+      const at = catalogTime(check.last.at);
+      $('injection-info').textContent = '最近请求检查：' + outcomes[check.last.outcome] + (at ? ' · ' + at : '') + '。此处显示插件处理结果。';
+    } else $('injection-info').textContent = '等待请求检查；可在「插件」页查看网关中间件的调用和错误。';
     const status = ['ready', 'waiting', 'stale'].includes(raw.status) ? raw.status : 'waiting';
     state.catalogStatus = status;
     state.catalogCheckedAt = typeof raw.checkedAt === 'string' ? raw.checkedAt : '';

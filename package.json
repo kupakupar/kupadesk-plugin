@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -12,9 +12,15 @@
     "kupadesk.middleware.js",
     "page",
     "README.md",
-    "settings-sync.mjs"
+    "settings-sync.mjs",
+    "request-index.js",
+    "request-index.mjs",
+    "model-match.js",
+    "diagnostics.mjs",
+    "kupadesk.hooks.mjs"
   ],
   "magpie": {
+    "hooks": "./kupadesk.hooks.mjs",
     "middleware": "./kupadesk.middleware.js",
     "page": {
       "title": "KupaDesk",
@@ -27,6 +33,7 @@
     "options": {
       "schemaVersion": 1,
       "enabled": false,
+      "gatewayTimeoutMs": 5000,
       "bindings": [],
       "catalogSync": {
         "intervalMs": 10000
