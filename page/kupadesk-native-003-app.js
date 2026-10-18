@@ -683,7 +683,20 @@
       $('save-options').focus();
       return;
     }
-    try { window.location.reload(); }
+    try {
+      const next = new URL(window.location.href);
+      if (next.protocol === 'http:' && next.hostname === 'wails.localhost') {
+        const script = [...document.scripts].find(node => node.src.includes('/kupadesk-native-003-app.js?'));
+        const key = script && new URL(script.src).searchParams.get('kupaAsset');
+        if (!/^[a-f0-9]{64}$/.test(key || '')) throw new Error('refresh unavailable');
+        next.pathname = next.pathname.replace(/[^/]*$/, 'kupadesk-native-003-page.html');
+        next.search = '';
+        next.searchParams.set('kupaAsset', key);
+      }
+      next.hash = '';
+      next.searchParams.set('fresh', String(Date.now()));
+      window.location.replace(next.href);
+    }
     catch { showError('页面暂时无法刷新，请稍后再试。'); }
   }
 

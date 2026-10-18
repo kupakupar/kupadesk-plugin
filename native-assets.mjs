@@ -4,8 +4,8 @@ import http from 'node:http';
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 
 // WebView2's legacy resource filter misses opaque-origin iframe subresources.
-// The HTML, its token, sandbox and policy still come from Magpie. This listener
-// supplies only this package's five namespaced static files on loopback.
+// Initial HTML and the iframe still come from Magpie. This listener supplies
+// package assets and a nonce-protected refresh document with the same policy.
 const HOSTS = ['127.0.0.1', '::1'];
 const HEALTH_PATH = '/_magpie/kupadesk-native-003/health';
 const MARKER = '__KUPADESK_ASSET_NONCE__';
@@ -16,6 +16,7 @@ const ASSETS = new Map([
   ['kupadesk-native-003-model-catalog.js', 'text/javascript; charset=utf-8'],
   ['kupadesk-native-003-icon.svg', 'image/svg+xml'],
   ['kupadesk-native-003-bridge.js', 'text/javascript; charset=utf-8'],
+  ['kupadesk-native-003-page.html', 'text/html; charset=utf-8'],
 ]);
 const noop = async () => {};
 
@@ -44,11 +45,21 @@ async function readKey(file) {
 }
 
 async function obtainKey(packageDir) {
-  const file = path.join(packageDir, '.native-assets-key');
+  const legacyFile = path.join(packageDir, '.native-assets-key');
+  // Bun replaces node_modules/kupadesk during upgrades. Keep the page capability
+  // beside node_modules so a currently open frame can refresh after an upgrade.
+  const parent = path.dirname(packageDir);
+  const file = path.basename(parent) === 'node_modules'
+    ? path.join(path.dirname(parent), '.kupadesk-native-assets-key') : legacyFile;
+  let previous;
+  if (file !== legacyFile) {
+    try { previous = await readKey(legacyFile); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   let handle;
   try {
     handle = await fs.open(file, 'wx', 0o600);
-    const value = randomBytes(32).toString('hex');
+    const value = previous || randomBytes(32).toString('hex');
     await handle.writeFile(value, 'utf8');
     await handle.close();
     return value;
@@ -112,20 +123,32 @@ function handler(pageDir, key, log) {
       const rawPath = request.url.split('?')[0];
       const match = rawPath.match(/^\/_magpie\/plugin\/[a-f0-9]{32}\/(kupadesk-native-003-[a-z.-]+)$/u);
       const params = url.searchParams;
-      const cacheBust = match?.[1] === 'kupadesk-native-003-model-catalog.js' &&
+      const cacheBust = ['kupadesk-native-003-model-catalog.js', 'kupadesk-native-003-page.html'].includes(match?.[1]) &&
         params.size === 2 && params.getAll('fresh').length === 1 && /^\d{1,16}$/u.test(params.get('fresh'));
       if (!match || url.pathname !== rawPath || !ASSETS.has(match[1]) ||
           params.getAll('kupaAsset').length !== 1 || (params.size !== 1 && !cacheBust) ||
           !equal(params.get('kupaAsset'), key)) {
         reject(response); return;
       }
-      const file = path.join(pageDir, match[1]);
+      const isPage = match[1] === 'kupadesk-native-003-page.html';
+      const file = path.join(pageDir, isPage ? 'index.template.html' : match[1]);
       const stat = await fs.lstat(file);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_ASSET ||
           !childOf(pageDir, await fs.realpath(file))) { reject(response); return; }
-      const data = await fs.readFile(file);
+      let data = await fs.readFile(file);
       if (data.length > MAX_ASSET) { reject(response); return; }
       fixedHeaders(response, ASSETS.get(match[1]));
+      if (isPage) {
+        data = Buffer.from(data.toString('utf8').replaceAll(MARKER, key));
+        const own = `http://wails.localhost/_magpie/plugin/${rawPath.split('/')[3]}/`;
+        response.setHeader('Content-Security-Policy', [
+          'sandbox allow-scripts', "default-src 'none'", `script-src ${own}`,
+          `style-src ${own} 'unsafe-inline'`, `img-src ${own} data:`,
+          `font-src ${own}`, `media-src ${own}`, "connect-src 'none'",
+          "frame-src 'none'", "worker-src 'none'", "object-src 'none'",
+          "form-action 'none'", "base-uri 'none'", "frame-ancestors 'self'",
+        ].join('; '));
+      }
       response.setHeader('Content-Length', data.length);
       response.writeHead(200);
       response.end(request.method === 'HEAD' ? undefined : data);

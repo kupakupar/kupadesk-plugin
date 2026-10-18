@@ -6,16 +6,18 @@ const root = path.resolve(__dirname, '..');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const clone = value => JSON.parse(JSON.stringify(value));
 
-async function fixture(connected = true) {
+async function fixture(connected = true, native = false) {
   let reloads = 0, writes = 0, finishSave;
   const console = new VirtualConsole();
   console.on('jsdomError', error => {
     if (/not implemented: navigation/i.test(error.message)) reloads++;
     else throw error;
   });
-  const dom = new JSDOM('<iframe></iframe>', {url: 'http://fixture.invalid', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console});
+  const frame = native ? '<iframe src="http://wails.localhost/_magpie/plugin/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/index.html"></iframe>' : '<iframe></iframe>';
+  const dom = new JSDOM(frame, {url: 'http://fixture.invalid', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: console});
   const win = dom.window.document.querySelector('iframe').contentWindow;
-  win.document.open(); win.document.write(fs.readFileSync(path.join(root, 'page/index.html'), 'utf8')); win.document.close();
+  const html = fs.readFileSync(path.join(root, 'page/index.html'), 'utf8').replaceAll('__KUPADESK_ASSET_NONCE__', 'a'.repeat(64));
+  win.document.open(); win.document.write(html); win.document.close();
   win.TextEncoder = TextEncoder;
   let saved = {schemaVersion: 1, enabled: true, bindings: [{id: 'a', name: 'Existing', prompt: 'KEEP_ORIGINAL', models: ['one/a']}]};
   win.magpie = {ready: connected ? Promise.resolve({dark: true}) : Promise.reject(new Error('host temporarily unavailable')),
@@ -58,6 +60,15 @@ async function fixture(connected = true) {
     offline.$('refresh-page').click(); assert.equal(offline.reloads(), 1, 'refresh remains available after handshake failure');
     assert.equal(offline.writes(), 0);
   } finally {offline.close();}
+  const native = await fixture(true, true);
+  try {
+    native.$('refresh-page').click(); assert.equal(native.reloads(), 1, 'native page navigates through the authenticated page refresh route');
+    assert.equal(native.writes(), 0);
+    native.win.document.querySelectorAll('script').forEach(script => script.remove());
+    native.$('refresh-page').click();
+    assert.equal(native.reloads(), 1, 'missing native capability does not navigate to a blank page');
+    assert.ok(native.$('save-error').textContent.includes('暂时无法刷新'));
+  } finally {native.close();}
   console.log(JSON.stringify({cleanReload: true, unsavedDraftProtected: true, pendingSaveProtected: true,
     refreshAfterSave: true, offlineRecovery: true, bindingsPreserved: true}));
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -84,6 +84,15 @@ test('Windows listener serves only nonce-protected namespaced assets on both loo
   const html = await fs.readFile(path.join(f.pageDir, 'index.html'), 'utf8');
   assert.equal(html.includes('__KUPADESK_ASSET_NONCE__'), false);
   assert.equal(html.includes(key), true);
+  const refreshed = await get(handle.port, assetPath(key, 'kupadesk-native-003-page.html') + '&fresh=123');
+  assert.equal(refreshed.status, 200);
+  assert.equal(refreshed.body, html);
+  assert.match(refreshed.headers['content-type'], /^text\/html/);
+  assert.match(refreshed.headers['content-security-policy'], /sandbox allow-scripts/);
+  assert.match(refreshed.headers['content-security-policy'], /connect-src 'none'/);
+  assert.match(refreshed.headers['content-security-policy'], /frame-ancestors 'self'/);
+  assert.ok(refreshed.headers['content-security-policy'].includes(`script-src http://wails.localhost/_magpie/plugin/${token}/`));
+  assert.equal(refreshed.headers['access-control-allow-origin'], undefined);
   // 008/009 intentionally stopped registering or rendering a provider panel.
   await assert.rejects(fs.readFile(path.join(f.pageDir, 'provider.html')), {code: 'ENOENT'});
 });
@@ -98,6 +107,8 @@ test('wrong Host, nonce, method and non-allowlisted or normalized paths never ex
     `${assetPath(key)}&fresh=123`, `${assetPath(key, BASENAMES[2])}&fresh=invalid`,
     `${assetPath(key, BASENAMES[2])}&fresh=123&fresh=456`,
     `${assetPath(key, BASENAMES[2])}&fresh=${'1'.repeat(17)}`,
+    assetPath(randomBytes(32).toString('hex'), 'kupadesk-native-003-page.html'),
+    `${assetPath(key, 'kupadesk-native-003-page.html')}&fresh=invalid`,
     `/_magpie/plugin/${token}/index.html?kupaAsset=${key}`, '/api/providers', '/',
     `/_magpie/plugin/${token}/../${token}/${BASENAMES[1]}?kupaAsset=${key}`,
     `/_magpie/plugin/${token}/%2e%2e/${token}/${BASENAMES[1]}?kupaAsset=${key}`,
@@ -111,6 +122,29 @@ test('wrong Host, nonce, method and non-allowlisted or normalized paths never ex
   assert.equal((await get(handle.port, assetPath(key), { method: 'POST' })).status, 405);
   assert.equal((await get(handle.port, assetPath(key), { headers: { Origin: 'https://other.example' } })).status, 404);
   assert.equal((await get(handle.port, assetPath(key), { headers: { Origin: 'null' } })).status, 200);
+});
+
+test('installed page key survives package replacement and migrates the already open page capability', async (t) => {
+  const f = await fixture(t);
+  const installed = path.join(f.packageDir, 'node_modules', 'kupadesk');
+  await fs.mkdir(installed, {recursive: true});
+  await fs.cp(f.pageDir, path.join(installed, 'page'), {recursive: true});
+  const oldKey = randomBytes(32).toString('hex');
+  await fs.writeFile(path.join(installed, '.native-assets-key'), oldKey);
+  const first = await f.start({packageDir: installed});
+  assert.equal(first.ok, true);
+  assert.equal(await fs.readFile(path.join(f.packageDir, '.kupadesk-native-assets-key'), 'utf8'), oldKey);
+  await first.stop();
+  // A package update deletes its generated key but retains the installation root.
+  await fs.unlink(path.join(installed, '.native-assets-key'));
+  const upgradedTemplate = '<!doctype html><title>UPGRADED</title><script src="kupadesk-native-003-app.js?kupaAsset=__KUPADESK_ASSET_NONCE__"></script>';
+  await fs.writeFile(path.join(installed, 'page', 'index.template.html'), upgradedTemplate);
+  const second = await f.start({packageDir: installed});
+  assert.equal(second.ok, true);
+  const response = await get(second.port, assetPath(oldKey, 'kupadesk-native-003-page.html') + '&fresh=456');
+  assert.equal(response.status, 200);
+  assert.equal(response.body, upgradedTemplate.replaceAll('__KUPADESK_ASSET_NONCE__', oldKey));
+  assert.equal((await get(second.port, assetPath(randomBytes(32).toString('hex'), 'kupadesk-native-003-page.html'))).status, 404);
 });
 
 test('same-directory process reuses authenticated owner then takes ownership after old owner stops', async (t) => {
