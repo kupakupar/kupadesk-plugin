@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -27,6 +27,12 @@
       "file": "page/index.html",
       "icon": "page/kupadesk-native-003-icon.svg"
     },
+    "panels": [
+      { "slot": "provider", "title": "KupaDesk", "file": "page/provider.html" }
+    ],
+    "actions": [
+      { "id": "configure-provider-prompts", "menu": "provider", "title": "配置 KupaDesk 提示词", "titles": {"en": "Configure KupaDesk prompts", "zh-TW": "設定 KupaDesk 提示詞"} }
+    ],
     "permissions": [
       "providers:list"
     ],

@@ -37,6 +37,12 @@ def check_host(executable, bun, fallback=False):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             received.append({'path': self.path, 'body': body})
+            if body.get('model') == 'fail':
+                self.send_response(503)
+                self.send_header('Content-Type','application/json')
+                self.end_headers()
+                self.wfile.write(b'{"error":{"message":"fixture unavailable"}}')
+                return
             message = {'role': 'assistant', 'content': 'fixture'}
             if body.get('stream'):
                 chunks = [
@@ -72,15 +78,17 @@ def check_host(executable, bun, fallback=False):
     profile.mkdir()
     providers = [
         {'id': 'one', 'name': 'One', 'was': ['former'], 'key': 'fixture',
-         'chat': origin + '/one/v1', 'models': ['unique', 'm']},
-        {'id': 'two', 'name': 'Two', 'key': 'fixture', 'chat': origin + '/two/v1', 'models': ['m']},
+         'chat': origin + '/one/v1', 'models': ['unique', 'm', 'fail']},
+        {'id': 'two', 'name': 'Two', 'key': 'fixture', 'chat': origin + '/two/v1', 'models': ['m','fallback']},
     ]
-    groups = [{'id': 'pool', 'name': 'Fixture Pool', 'members': ['one/m', 'two/m']}]
+    groups = [{'id': 'pool', 'name': 'Fixture Pool', 'members': ['one/m', 'two/m']},
+              {'id':'switch','name':'Fallback Pool','members':['one/fail','two/fallback'],'routing':'order'}]
     options = {'schemaVersion': 1, 'enabled': True, 'gatewayTimeoutMs': 5000,
-               'bindings': [{'id': 'one', 'enabled': True, 'models': ['one/unique', 'one/m', 'one/later'],
+               'bindings': [{'id': 'one', 'enabled': True, 'models': ['one/unique', 'one/m', 'one/later','one/fail'],
                              'prompt': 'FIXTURE_PROMPT', 'chatRole': 'auto'},
                             {'id': 'pool', 'enabled': True, 'models': ['group/pool'],
-                             'prompt': 'POOL_PROMPT', 'chatRole': 'auto'}]}
+                             'prompt': 'POOL_PROMPT', 'chatRole': 'auto'},
+                            {'id':'fallback','enabled':True,'models':['two/fallback'],'prompt':'FALLBACK_PROMPT'}]}
     for name, value in {
         'providers.json': {'providers': providers, 'groups': groups},
         'settings.json': {'proxy': 'direct', 'noStats': True},
@@ -137,11 +145,19 @@ def check_host(executable, bun, fallback=False):
         else:
             raise RuntimeError('isolated host startup timed out')
         request('canonical', chat('one/unique'))
+        for _ in range(80):
+            if '"providerHook":true' in (package / 'request-index.js').read_text(encoding='utf-8'):
+                time.sleep(1.1)
+                break
+            time.sleep(.2)
+        else:
+            raise AssertionError('provider hook capability was not discovered')
         request('effort suffix', chat('one/unique:max'))
         request('bare model', chat('unique'))
         request('provider rename', chat('former/unique'))
         request('routing group name', chat('Fixture Pool'), prompt='POOL_PROMPT')
-        request('ambiguous bare model', chat('m'), expected=400)
+        # The entry name is shared, but the actual provider disambiguates it.
+        request('ambiguous entry resolved by provider', chat('m'))
         request('long history', chat('unique', 'x' * (2 * 1024 * 1024)))
         request('anthropic client', {'model': 'unique', 'system': 'ORIGINAL_SYSTEM',
                                     'messages': [{'role': 'user', 'content': 'FIXTURE_USER'}], 'max_tokens': 8}, '/v1/messages')
@@ -151,6 +167,12 @@ def check_host(executable, bun, fallback=False):
                                  'contents': [{'role': 'user', 'parts': [{'text': 'FIXTURE_USER'}]}]},
                 '/v1beta/models/one/unique:generateContent')
         request('unbound passthrough', chat('two/m'), prompt=None)
+        before=len(received)
+        request('fallback uses actual provider binding',chat('group/switch'),prompt='FALLBACK_PROMPT')
+        attempts=received[before:]
+        failed=[a for a in attempts if a['body'].get('model')=='fail']
+        assert failed and 'FIXTURE_PROMPT' in json.dumps(failed[0]['body']), 'first provider lost its own binding'
+        assert 'FIXTURE_PROMPT' not in json.dumps(attempts[-1]['body']), 'fallback inherited previous provider prompt'
         providers[0]['models'].append('later')
         (config / 'providers.json').write_text(json.dumps({'providers': providers, 'groups': groups}), encoding='utf-8')
         for _ in range(80):
@@ -168,7 +190,8 @@ def check_host(executable, bun, fallback=False):
                     value = json.loads(source.split('window.KUPADESK_MODEL_CATALOG = ', 1)[1].rsplit(';', 1)[0])
                 except (ValueError, IndexError):
                     value = {}
-                if value.get('injection', {}).get('totals', {}).get('injected', 0) >= 5:
+                counts=value.get('injection', {}).get('totals', {})
+                if counts.get('deferred', 0) >= 5:
                     break
                 time.sleep(.3)
             else:

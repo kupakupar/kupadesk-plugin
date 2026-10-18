@@ -16,12 +16,13 @@
     <header class="page-header">
       <div class="brand">
         <img src="kupadesk-native-003-icon.svg?kupaAsset=__KUPADESK_ASSET_NONCE__" width="32" height="32" alt="">
-        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">v0.0.6</span></div><p>本地提示词 · 沿用原供应商连接</p></div>
+        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">v0.0.7</span></div><p>本地提示词 · 沿用原供应商连接</p></div>
       </div>
       <span class="connection-label" id="connection-label">正在连接 Magpie</span>
     </header>
 
     <div id="connection-notice" class="notice" role="status" hidden></div>
+    <div id="provider-context" class="provider-context" role="status" hidden><span id="provider-context-name"></span><button id="clear-provider-context" class="text-button" type="button">显示全部供应商</button></div>
 
     <div class="control-strip">
       <section class="activation-panel" aria-labelledby="activation-title">
@@ -35,6 +36,7 @@
     </div>
 
     <p id="injection-info" class="field-help" role="status" aria-live="polite">等待请求检查…</p>
+    <p id="binding-mode" class="field-help">路由组直接绑定优先，其余按本次实际供应商和模型匹配。</p>
 
     <div class="workspace">
       <aside class="binding-sidebar" aria-labelledby="bindings-heading">

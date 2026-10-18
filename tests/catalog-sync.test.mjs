@@ -159,6 +159,18 @@ test('unchanged refreshes avoid rewriting until heartbeat and catalog writes are
   assert.equal((await f.read()).source, '</script>');
 });
 
+test('official host version enables provider-stage matching without copying private metadata', async t => {
+  const f = await fixture(t);
+  const sync = startCatalogSync({...f, env:{}, fetchImpl:async url => url.endsWith('/api/hello')
+    ? new Response(JSON.stringify({name:'magpie',version:'0.1.1285'}))
+    : result([{id:'a/m'}])});
+  await sync.refresh();
+  const value=await f.read();
+  assert.equal(value.providerHook,true);
+  assert.equal(value.hostVersion,'0.1.1285');
+  assert.match(await fs.readFile(path.join(f.packageDir,'request-index.js'),'utf8'), /"providerHook":true/);
+});
+
 test('plugin initialization returns without making or waiting for a model request', async (t) => {
   const f = await fixture(t);
   const sourceDir = fileURLToPath(new URL('../', import.meta.url));
