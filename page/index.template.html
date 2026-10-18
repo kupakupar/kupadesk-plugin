@@ -12,76 +12,55 @@
 </head>
 <body>
   <a class="skip-link" href="#binding-editor">跳到提示词编辑</a>
-  <div class="app-shell">
+  <div class="app-shell" id="app-shell">
     <header class="page-header">
       <div class="brand">
         <img src="kupadesk-native-003-icon.svg?kupaAsset=__KUPADESK_ASSET_NONCE__" width="32" height="32" alt="">
-        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">v0.0.8</span></div><p>本地提示词 · 沿用原供应商连接</p></div>
+        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">0.0.9</span></div><p>提示词库 · 按模型应用</p></div>
       </div>
       <span class="connection-label" id="connection-label">正在连接 Magpie</span>
     </header>
-
     <div id="connection-notice" class="notice" role="status" hidden></div>
-
-    <div class="control-strip">
-      <section class="activation-panel" aria-labelledby="activation-title">
-        <h2 id="activation-title">提示词注入</h2>
-        <label class="switch-label"><span id="injection-state">已关闭</span><input id="injection-enabled" type="checkbox" role="switch" aria-label="启用提示词注入" disabled><span class="switch-track" aria-hidden="true"></span></label>
-      </section>
-      <section class="catalog-status-panel" aria-label="模型目录自动同步">
-        <div><span class="catalog-status-title">模型目录</span><p id="catalog-info" class="field-help catalog-info" role="status" aria-live="polite">正在等待插件后台读取模型…</p></div>
-        <button id="refresh-catalog" class="button button-subtle" type="button" disabled>刷新目录</button>
-      </section>
-    </div>
-
-    <p id="injection-info" class="field-help" role="status" aria-live="polite">等待请求检查…</p>
-
+    <section class="status-strip" aria-label="注入与同步状态">
+      <div class="activation-panel"><h2>提示词注入</h2><label class="switch-label"><span id="injection-state">已关闭</span><input id="injection-enabled" type="checkbox" role="switch" aria-label="启用提示词注入" disabled><span class="switch-track" aria-hidden="true"></span></label></div>
+      <details class="status-details" id="status-details">
+        <summary>模型目录 <span id="catalog-compact">同步中</span></summary>
+        <div class="status-popover">
+          <div class="section-heading"><h2>模型目录</h2><button id="refresh-catalog" class="button button-subtle" type="button" disabled>刷新目录</button></div>
+          <p id="catalog-info" class="field-help" role="status" aria-live="polite">正在等待插件后台读取模型…</p>
+          <div class="diagnostic-block"><h3>最近请求</h3><p id="injection-info" class="field-help" role="status" aria-live="polite">等待请求检查…</p></div>
+          <p class="field-help">请求沿用原供应商连接。此处仅显示插件处理结果。</p>
+        </div>
+      </details>
+    </section>
     <div class="workspace">
       <aside class="binding-sidebar" aria-labelledby="bindings-heading">
-        <div class="section-heading"><h2 id="bindings-heading">提示词库 <span id="binding-count" class="count">0</span></h2><button id="add-binding" class="button button-subtle" type="button" disabled>＋ 新建</button></div>
+        <div class="section-heading"><h2 id="bindings-heading">提示词库 <span id="binding-count" class="count">0</span></h2><button id="add-binding" class="button button-subtle" type="button" disabled>新建</button></div>
         <label class="search-label"><span class="sr-only">搜索提示词名称、正文或模型</span><input id="binding-search" type="search" placeholder="搜索提示词或模型" autocomplete="off" disabled></label>
-        <div id="binding-list" class="binding-list" aria-label="本地提示词列表"></div>
-        <p id="list-empty" class="list-empty">还没有本地提示词</p>
-        <p class="sidebar-note">提示词只保存在此插件的本地设置中。</p>
+        <div id="binding-list" class="binding-list" aria-label="提示词列表"></div>
+        <p id="list-empty" class="list-empty">还没有提示词</p>
+        <details class="sidebar-note"><summary>保存与同步</summary><p>保存设置后写入当前 Magpie。跨设备同步沿用现有同步设置；此页面不代表云端同步已完成。</p></details>
       </aside>
-
       <main id="binding-editor" class="editor-panel" tabindex="-1">
-        <div id="empty-state" class="empty-state">
-          <div class="empty-symbol" aria-hidden="true">＋</div>
-          <h2>创建你的本地提示词库</h2>
-          <p>可保存多份提示词，分别选择要应用的模型；也可以先保存，稍后再绑定。</p>
-          <button id="empty-add-binding" class="button button-primary" type="button" disabled>新建第一份提示词</button>
-        </div>
-
+        <div id="empty-state" class="empty-state"><h2>你的提示词，从这里开始</h2><p>保存多份提示词，为每一份选择要应用的模型。</p><button id="empty-add-binding" class="button button-primary" type="button" disabled>新建提示词</button></div>
         <form id="binding-form" hidden novalidate>
-          <div class="editor-heading"><h2>提示词设置</h2><span id="editor-title" class="eyebrow">新提示词</span><button id="copy-binding" class="button button-subtle" type="button" disabled>复制提示词</button></div>
-          <div class="binding-identity"><div class="field name-field"><label for="binding-name">提示词名称</label><input id="binding-name" type="text" maxlength="80" placeholder="例如：日常编程" autocomplete="off" aria-describedby="name-error"><p id="name-error" class="field-error" hidden></p></div><label class="checkbox-label"><input id="binding-enabled" type="checkbox">启用此提示词</label></div>
-          <div class="editor-columns">
-            <section class="prompt-pane" aria-label="提示词与角色">
-              <div class="field prompt-field"><div class="label-row"><label for="binding-prompt">提示词</label><span id="prompt-count" class="character-count">0 / 32768</span></div><textarea id="binding-prompt" rows="13" placeholder="写下要应用到所选模型的提示词…" aria-describedby="prompt-error prompt-limit-help"></textarea><p id="prompt-limit-help" class="field-help">最多 32768 个字符；超限会提示，不会截断粘贴的内容。所有提示词合计仍受设置存储大小限制。</p><p id="prompt-error" class="field-error" hidden></p></div>
-              <details class="advanced-options"><summary>进阶设置</summary><div class="field role-field"><label for="binding-role">Chat 提示词角色</label><select id="binding-role" aria-describedby="role-help"><option value="auto">自动（推荐）</option><option value="system">System · 系统</option><option value="developer">Developer · 开发者</option></select><p id="role-help" class="field-help">自动按请求格式选择角色。手动选择角色用于兼容不同接口。</p></div></details>
-            </section>
-            <section class="field model-picker" aria-labelledby="model-picker-heading" aria-describedby="catalog-info models-error">
-            <div class="label-row"><h3 id="model-picker-heading">选择模型</h3><span id="selected-model-count" class="selection-count">已选 0 个</span></div>
-            <div class="model-filters"><label class="model-search-label"><span class="sr-only">搜索模型名称、ID 或供应商</span><input id="model-search" type="search" placeholder="搜索名称、ID 或供应商" autocomplete="off" disabled></label><label class="model-provider-label"><span class="sr-only">按供应商筛选</span><select id="model-provider" disabled><option value="">所有供应商</option></select></label></div>
-            <div class="model-toolbar"><label class="checkbox-label"><input id="models-selected-only" type="checkbox" disabled>只看已选</label><div><button id="select-visible-models" class="text-button" type="button" disabled>选择当前显示</button><button id="clear-selected-models" class="text-button" type="button" disabled>清空已选</button></div></div>
-            <div id="model-list" class="model-list" role="group" aria-label="可选模型"></div>
-            <p id="model-list-empty" class="model-list-empty" hidden>没有匹配的模型</p>
-            <p id="model-list-summary" class="field-help" aria-live="polite"></p>
-            <div id="extra-selected-models" class="extra-selected-models" hidden><p class="field-help">以下已选模型当前不可用，仍会保留绑定，不会自动解除：</p><div id="extra-model-list" class="extra-model-list" role="group" aria-label="当前不可用的已选模型"></div><p id="extra-model-summary" class="field-help" hidden></p></div>
-            <details id="manual-models" class="manual-models"><summary>手动填写模型 ID</summary><label for="binding-models" class="sr-only">完整模型 ID</label><textarea id="binding-models" rows="2" spellcheck="false" placeholder="provider/model" aria-describedby="models-help models-error"></textarea><p id="models-help" class="field-help">与上方多选同步。多个模型可换行或用逗号分隔，已有选择不会因筛选而丢失。</p><p id="providers-reference" class="field-help" hidden></p></details>
-            <p id="models-error" class="field-error" hidden></p>
-            </section>
-          </div>
-          <div class="editor-bottom"><p>可先保存提示词，绑定模型后才会应用。</p><button id="delete-binding" class="button button-danger" type="button">删除提示词</button></div>
+          <div class="editor-heading"><div class="editor-heading-text"><span class="eyebrow">正在编辑</span><h2 id="editor-title">新提示词</h2></div><div class="editor-actions"><button id="focus-editor" class="button button-quiet" type="button" aria-pressed="false" disabled>专注编辑</button><details class="actions-menu" id="prompt-actions"><summary class="button button-quiet" aria-label="提示词操作">操作</summary><div class="actions-popover"><button id="copy-binding" type="button" disabled>创建副本</button><button id="delete-binding" class="danger-action" type="button">删除提示词</button></div></details></div></div>
+          <div class="binding-identity"><div class="field name-field"><label for="binding-name">名称</label><input id="binding-name" type="text" maxlength="80" placeholder="为这份提示词起个名字" autocomplete="off" aria-describedby="name-error"><p id="name-error" class="field-error" hidden></p></div><label class="checkbox-label"><input id="binding-enabled" type="checkbox">启用</label></div>
+          <div class="binding-summary"><div class="binding-summary-text"><span class="binding-summary-title" id="bound-model-summary">尚未绑定模型</span><p id="bound-model-names">选择要应用此提示词的模型</p></div><button id="manage-models" class="button button-subtle" type="button" aria-haspopup="dialog" aria-controls="model-drawer" disabled>管理绑定</button></div>
+          <section class="prompt-pane" aria-label="提示词正文"><div class="label-row"><label for="binding-prompt">提示词正文</label><span id="prompt-count" class="character-count">0 / 32768</span></div><textarea id="binding-prompt" rows="16" spellcheck="false" placeholder="写下要应用到所选模型的提示词…" aria-describedby="prompt-error prompt-limit-help"></textarea><p id="prompt-error" class="field-error" hidden></p></section>
+          <div class="editor-bottom"><details class="advanced-options"><summary>进阶设置</summary><div class="advanced-content"><div class="field role-field"><label for="binding-role">Chat 提示词角色</label><select id="binding-role" aria-describedby="role-help"><option value="auto">自动（推荐）</option><option value="system">System · 系统</option><option value="developer">Developer · 开发者</option></select><p id="role-help" class="field-help">自动按请求格式选择角色。手动选择用于兼容不同接口。</p></div><p id="prompt-limit-help" class="field-help">每份最多 32768 字符；超限保留原文并提示。所有提示词合计受 48 KB 设置存储限制。</p></div></details><span class="editor-hint">保存后应用到所选模型</span></div>
         </form>
       </main>
     </div>
-
-    <footer class="save-bar">
-      <div class="save-feedback"><span id="save-status" role="status" aria-live="polite">正在读取本地设置…</span><button id="undo-delete" class="text-button" type="button" hidden>撤销删除</button><p id="save-error" role="alert" hidden></p></div>
-      <div class="save-actions"><span id="storage-meter" class="storage-meter">0 / 48 KB</span><button id="discard-changes" class="button button-subtle" type="button" disabled>还原修改</button><button id="save-options" class="button button-primary" type="button" disabled>保存到本地 <kbd>Ctrl S</kbd></button></div>
-    </footer>
+    <footer class="save-bar"><div class="save-feedback"><span id="save-status" role="status" aria-live="polite">正在读取设置…</span><button id="undo-delete" class="text-button" type="button" hidden>撤销删除</button><p id="save-error" role="alert" hidden></p></div><div class="save-actions"><span id="storage-meter" class="storage-meter">0 / 48 KB</span><button id="discard-changes" class="button button-quiet" type="button" disabled>还原修改</button><button id="save-options" class="button button-primary" type="button" disabled>保存设置 <kbd>Ctrl S</kbd></button></div></footer>
   </div>
+  <dialog id="model-drawer" class="model-drawer" aria-labelledby="model-picker-heading" aria-describedby="drawer-help">
+    <div class="drawer-heading"><div><span class="eyebrow" id="drawer-binding-name">当前提示词</span><h2 id="model-picker-heading">模型绑定 <span id="selected-model-count" class="selection-count">已选 0 个</span></h2></div><button id="close-model-drawer" class="button button-quiet" type="button" aria-label="关闭模型绑定">关闭</button></div>
+    <p id="drawer-help" class="field-help">可搜索、多选。选择计入当前草稿，保存设置后生效。</p>
+    <div class="model-filters"><label><span class="sr-only">搜索模型名称、ID 或供应商</span><input id="model-search" type="search" placeholder="搜索模型名称、ID 或供应商" autocomplete="off" disabled></label><label><span class="sr-only">按供应商筛选</span><select id="model-provider" disabled><option value="">所有供应商</option></select></label></div>
+    <div class="model-toolbar"><label class="checkbox-label"><input id="models-selected-only" type="checkbox" disabled>只看已选</label><div><button id="select-visible-models" class="text-button" type="button" disabled>选择当前显示</button><button id="clear-selected-models" class="text-button" type="button" disabled>清空已选</button></div></div>
+    <div class="drawer-scroll"><div id="model-list" class="model-list" role="group" aria-label="可选模型"></div><p id="model-list-empty" class="model-list-empty" hidden>没有匹配的模型</p><p id="model-list-summary" class="field-help" aria-live="polite"></p><div id="extra-selected-models" class="extra-selected-models" hidden><p class="field-help">以下已选模型当前不可用，已有绑定仍会保留：</p><div id="extra-model-list" class="extra-model-list" role="group" aria-label="当前不可用的已选模型"></div><p id="extra-model-summary" class="field-help" hidden></p></div><details id="manual-models" class="manual-models"><summary>手动填写模型 ID</summary><label for="binding-models" class="sr-only">完整模型 ID</label><textarea id="binding-models" rows="3" spellcheck="false" placeholder="provider/model" aria-describedby="models-help models-error"></textarea><p id="models-help" class="field-help">与多选同步。多个模型换行或用逗号分隔，筛选不会清除已有选择。</p><p id="providers-reference" class="field-help" hidden></p></details><p id="models-error" class="field-error" hidden></p></div>
+    <div class="drawer-footer"><span class="field-help">关闭抽屉会保留当前选择</span><button id="done-model-drawer" class="button button-primary" type="button">完成选择</button></div>
+  </dialog>
 </body>
 </html>

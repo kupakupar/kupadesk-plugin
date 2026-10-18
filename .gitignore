@@ -1,0 +1,8 @@
+# Private UI captures may include the user's prompt text.
+evidence/
+design-qa.md
+validation-009.json
+.upgrade-backup-path
+upgrade-009.json
+__pycache__/
+tests/.native-assets-fixtures/

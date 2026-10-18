@@ -12,7 +12,7 @@
   const $ = id => document.getElementById(id);
   const clone = value => JSON.parse(JSON.stringify(value));
   const state = { options: null, saved: null, selected: null, deleted: [], connected: false, saving: false, lastSave: 0, cooldown: null, catalog: [], catalogById: new Map(), catalogProviders: new Map(), visibleModels: [], catalogSignature: '', catalogStatus: 'waiting', catalogLastSuccess: '', catalogCheckedAt: '', catalogReloadFailed: false, catalogLoading: false, catalogTimer: null, catalogRequestTimer: null, catalogScript: null, disposed: false };
-  const controls = ['injection-enabled', 'add-binding', 'empty-add-binding', 'binding-search', 'copy-binding'];
+  const controls = ['injection-enabled', 'add-binding', 'empty-add-binding', 'binding-search', 'copy-binding', 'manage-models', 'focus-editor'];
   const fieldIds = ['binding-name', 'binding-models', 'binding-prompt', 'binding-role', 'binding-enabled'];
   const pickerControls = ['model-search', 'model-provider', 'models-selected-only', 'select-visible-models', 'clear-selected-models'];
 
@@ -91,6 +91,8 @@
     if (last) message += (message.endsWith('。') ? '' : ' · ') + '上次成功：' + last;
     $('catalog-info').textContent = message;
     $('catalog-info').dataset.status = status;
+    $('catalog-compact').textContent = status === 'ready' ? state.catalog.length + ' 个模型' : status === 'stale' ? '暂不可用' : '同步中';
+    $('catalog-compact').dataset.status = status;
     $('refresh-catalog').disabled = !state.connected || state.catalogLoading || state.disposed;
     $('refresh-catalog').textContent = state.catalogLoading ? '刷新中…' : '刷新目录';
     $('refresh-catalog').setAttribute('aria-busy', String(state.catalogLoading));
@@ -326,6 +328,50 @@
     for (const id of extraIds.slice(0, MODEL_RENDER_LIMIT)) extras.append(modelRow({ id, name: id, providerName: '当前不可用 · 保留绑定' }, selected, occupied));
     $('extra-model-summary').hidden = extraIds.length <= MODEL_RENDER_LIMIT;
     $('extra-model-summary').textContent = '另有 ' + Math.max(0, extraIds.length - MODEL_RENDER_LIMIT) + ' 个已选模型保留在手动 ID 列表中。';
+    drawBindingSummary();
+  }
+
+  // View state only: selections still use the 008 draft and save flow.
+  function drawBindingSummary() {
+    const binding = currentBinding();
+    const ids = binding?.models || [];
+    $('bound-model-summary').textContent = ids.length ? '已绑定 ' + ids.length + ' 个模型' : '尚未绑定模型';
+    const names = ids.map(id => state.catalogById.get(id)?.name || id);
+    $('bound-model-names').textContent = names.length ? names.join('、') : '可先保存提示词，稍后再选择模型';
+    $('bound-model-names').title = names.join('\n');
+    $('drawer-binding-name').textContent = binding?.name.trim() || '新提示词';
+    $('manage-models').disabled = !binding || state.saving || !state.connected;
+    $('focus-editor').disabled = !binding || state.saving || !state.connected;
+  }
+
+  let drawerOpener = null;
+  function openModelDrawer() {
+    if (!currentBinding() || !state.connected || state.saving) return;
+    const drawer = $('model-drawer');
+    if (drawer.open) return;
+    drawerOpener = document.activeElement;
+    $('prompt-actions').open = false;
+    $('status-details').open = false;
+    drawModelPicker();
+    drawer.showModal();
+    ($('model-search').disabled ? $('close-model-drawer') : $('model-search')).focus();
+  }
+
+  function closeModelDrawer() {
+    const drawer = $('model-drawer');
+    if (!drawer.open) return;
+    drawer.close();
+    if (drawerOpener?.isConnected && !drawerOpener.disabled) drawerOpener.focus();
+    drawerOpener = null;
+  }
+
+  function setFocusEditor(enabled) {
+    $('app-shell').dataset.focus = String(enabled);
+    $('focus-editor').setAttribute('aria-pressed', String(enabled));
+    $('focus-editor').textContent = enabled ? '退出专注' : '专注编辑';
+    $('prompt-actions').open = false;
+    $('status-details').open = false;
+    if (enabled) $('binding-prompt').focus();
   }
 
   function updateSaveState(label) {
@@ -335,12 +381,12 @@
     $('storage-meter').style.color = bytes > LIMIT_BYTES ? 'var(--danger)' : '';
     $('save-status').dataset.dirty = String(dirty);
     $('save-status').dataset.saved = String(state.connected && !dirty);
-    $('save-status').textContent = label || (dirty ? '有未保存的修改' : (state.connected ? '已保存到本地' : '尚未连接 Magpie'));
+    $('save-status').textContent = label || (dirty ? '有未保存的修改' : (state.connected ? '设置已保存' : '尚未连接 Magpie'));
     $('save-options').disabled = !state.connected || !dirty || state.saving || Date.now() - state.lastSave < 1100;
     $('discard-changes').disabled = !state.connected || !dirty || state.saving;
     $('undo-delete').hidden = state.deleted.length === 0 || state.saving;
     $('injection-state').textContent = state.options?.enabled ? '已开启' : '已关闭';
-    $('save-options').firstChild.textContent = state.saving ? '保存中… ' : '保存到本地 ';
+    $('save-options').firstChild.textContent = state.saving ? '保存中… ' : '保存设置 ';
     $('save-options').setAttribute('aria-busy', String(state.saving));
   }
 
@@ -353,7 +399,8 @@
   }
 
   function fieldError(name, message) {
-    if (name === 'models') $('manual-models').open = true;
+    if (name === 'models') { openModelDrawer(); $('manual-models').open = true; }
+    if (name === 'prompt') $('prompt-count').dataset.overLimit = String(currentBinding()?.prompt.length > PROMPT_LIMIT);
     $('binding-' + name).setAttribute('aria-invalid', 'true');
     $(name + '-error').textContent = message;
     $(name + '-error').hidden = false;
@@ -384,7 +431,7 @@
       enabled.textContent = binding.enabled ? '启用' : '停用';
       const models = document.createElement('span');
       models.className = 'binding-card-model';
-      models.textContent = binding.models.length ? '已绑 ' + binding.models.length + ' 个模型' : '未绑定 · 仅本地保存';
+      models.textContent = binding.models.length ? '已绑定 ' + binding.models.length + ' 个模型' : '尚未绑定模型';
       // Search can match the body without exposing it in cards or tooltips.
       button.title = binding.name.trim() || '未命名提示词';
       row.append(name, enabled);
@@ -404,7 +451,7 @@
     $('empty-state').hidden = Boolean(binding);
     $('binding-form').hidden = !binding;
     $('copy-binding').disabled = !binding || state.saving || !state.connected;
-    if (!binding) return;
+    if (!binding) { closeModelDrawer(); setFocusEditor(false); return; }
     $('binding-name').value = binding.name;
     $('binding-models').value = binding.models.join('\n');
     $('binding-prompt').value = binding.prompt;
@@ -412,6 +459,7 @@
     $('binding-enabled').checked = binding.enabled;
     $('editor-title').textContent = binding.name.trim() || '新提示词';
     $('prompt-count').textContent = binding.prompt.length + ' / ' + PROMPT_LIMIT;
+    $('prompt-count').dataset.overLimit = String(binding.prompt.length > PROMPT_LIMIT);
     drawModelPicker();
   }
 
@@ -432,6 +480,8 @@
     binding.enabled = $('binding-enabled').checked;
     $('editor-title').textContent = binding.name.trim() || '新提示词';
     $('prompt-count').textContent = binding.prompt.length + ' / ' + PROMPT_LIMIT;
+    $('prompt-count').dataset.overLimit = String(binding.prompt.length > PROMPT_LIMIT);
+    drawBindingSummary();
     clearValidation();
     showError('');
     drawList();
@@ -451,6 +501,7 @@
   }
 
   function copyBinding() {
+    $('prompt-actions').open = false;
     const source = currentBinding();
     if (!source || !state.connected || state.saving) return;
     const suffix = '（副本）';
@@ -558,7 +609,7 @@
       state.saved = clone(state.options);
       state.selected = state.options.bindings[0]?.id || null;
       state.connected = true;
-      $('connection-label').textContent = '本地设置';
+      $('connection-label').textContent = '已连接 Magpie';
       $('connection-label').dataset.connected = 'true';
       for (const id of controls) $(id).disabled = false;
       try { loadCatalog(); }
@@ -600,6 +651,19 @@
   $('add-binding').addEventListener('click', safely(addBinding));
   $('empty-add-binding').addEventListener('click', safely(addBinding));
   $('copy-binding').addEventListener('click', safely(copyBinding));
+  $('manage-models').addEventListener('click', safely(openModelDrawer));
+  $('close-model-drawer').addEventListener('click', safely(closeModelDrawer));
+  $('done-model-drawer').addEventListener('click', safely(closeModelDrawer));
+  $('model-drawer').addEventListener('cancel', safely(event => { event.preventDefault(); closeModelDrawer(); }));
+  $('model-drawer').addEventListener('click', safely(event => {
+    if (event.target !== $('model-drawer')) return;
+    const rect = $('model-drawer').getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeModelDrawer();
+  }));
+  $('focus-editor').addEventListener('click', safely(() => setFocusEditor($('app-shell').dataset.focus !== 'true')));
+  document.addEventListener('click', event => {
+    for (const id of ['prompt-actions', 'status-details']) if (!$(id).contains(event.target)) $(id).open = false;
+  });
   $('binding-search').addEventListener('input', safely(drawList));
   $('refresh-catalog').addEventListener('click', safely(refreshCatalog));
   $('model-search').addEventListener('input', safely(drawModelPicker));
@@ -625,6 +689,7 @@
   $('binding-form').addEventListener('submit', safely(event => { event.preventDefault(); void saveOptions(); }));
   $('save-options').addEventListener('click', () => { void saveOptions(); });
   $('delete-binding').addEventListener('click', safely(() => {
+    $('prompt-actions').open = false;
     const binding = currentBinding();
     if (!binding || state.saving) return;
     const index = state.options.bindings.findIndex(item => item.id === binding.id);
@@ -654,6 +719,26 @@
     drawAll();
   }));
   document.addEventListener('keydown', safely(event => {
+    if ($('model-drawer').open) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeModelDrawer();
+        return;
+      }
+      if (event.key === 'Tab') {
+        const targets = [...$('model-drawer').querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary')]
+          .filter(element => element.getClientRects().length > 0);
+        const first = targets[0], last = targets[targets.length - 1];
+        if (first && event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (last && !event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    }
+    if (event.key === 'Escape' && !$('model-drawer').open) {
+      const hadMenu = $('prompt-actions').open || $('status-details').open;
+      $('prompt-actions').open = false;
+      $('status-details').open = false;
+      if (!hadMenu && $('app-shell').dataset.focus === 'true') { setFocusEditor(false); $('focus-editor').focus(); }
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void saveOptions();
