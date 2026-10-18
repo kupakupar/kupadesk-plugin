@@ -12,8 +12,6 @@
   const $ = id => document.getElementById(id);
   const clone = value => JSON.parse(JSON.stringify(value));
   const state = { options: null, saved: null, selected: null, deleted: [], connected: false, saving: false, lastSave: 0, cooldown: null, catalog: [], catalogById: new Map(), catalogProviders: new Map(), visibleModels: [], catalogSignature: '', catalogStatus: 'waiting', catalogLastSuccess: '', catalogCheckedAt: '', catalogReloadFailed: false, catalogLoading: false, catalogTimer: null, catalogRequestTimer: null, catalogScript: null, disposed: false };
-  const providerPanel = document.documentElement.dataset.panel === 'provider';
-  let focusedProvider = null;
   const controls = ['injection-enabled', 'add-binding', 'empty-add-binding', 'binding-search', 'copy-binding'];
   const fieldIds = ['binding-name', 'binding-models', 'binding-prompt', 'binding-role', 'binding-enabled'];
   const pickerControls = ['model-search', 'model-provider', 'models-selected-only', 'select-visible-models', 'clear-selected-models'];
@@ -100,7 +98,7 @@
 
   function replaceProviderOptions(providers) {
     const select = $('model-provider');
-    const previousId = focusedProvider?.id || select.value;
+    const previousId = select.value;
     const previousName = state.catalogProviders.get(previousId) || previousId;
     const all = document.createElement('option');
     all.value = '';
@@ -125,10 +123,7 @@
     const raw = window.KUPADESK_MODEL_CATALOG;
     if (!raw || raw.schemaVersion !== 1 || !Array.isArray(raw.models)) throw new Error('CATALOG_UNAVAILABLE');
     const check = raw.injection;
-    const outcomes = {injected: '已生成提示词注入', already: '已确认提示词存在', unbound: '此请求未绑定提示词', invalid: '注入检查失败，请检查模型绑定和插件错误', deferred: '已通过配置检查，将按实际供应商匹配'};
-    $('binding-mode').textContent = raw.providerHook === true
-      ? '路由组直接绑定优先，其余按本次实际供应商和模型匹配；失败换线会重新匹配。'
-      : '当前按入口模型匹配。Magpie 0.1.1283 及以上可在目录同步后启用实际供应商匹配。';
+    const outcomes = {injected: '已生成提示词注入', already: '已确认提示词存在', unbound: '此请求未绑定提示词', invalid: '注入检查失败，请检查模型绑定和插件错误'};
     if (check?.last && outcomes[check.last.outcome]) {
       const at = catalogTime(check.last.at);
       $('injection-info').textContent = '最近请求检查：' + outcomes[check.last.outcome] + (at ? ' · ' + at : '') + '。此处显示插件处理结果。';
@@ -323,7 +318,7 @@
     $('select-visible-models').disabled = !binding || !available || state.saving || !state.connected;
     $('clear-selected-models').disabled = !binding || !selected.size || state.saving || !state.connected;
     for (const id of ['model-search', 'models-selected-only']) $(id).disabled = !binding || state.saving || !state.connected || !state.catalog.length;
-    $('model-provider').disabled = !binding || state.saving || !state.connected || !state.catalogProviders.size || providerPanel;
+    $('model-provider').disabled = !binding || state.saving || !state.connected || !state.catalogProviders.size;
     const extraIds = [...selected].filter(id => !state.catalogById.has(id));
     $('extra-selected-models').hidden = extraIds.length === 0;
     const extras = $('extra-model-list');
@@ -548,22 +543,6 @@
     document.documentElement.style.colorScheme = theme?.dark ? 'dark' : 'light';
   }
 
-  function focusProvider(provider) {
-    if (!provider || typeof provider.id !== 'string' || !provider.id || provider.id.length > 512) return;
-    focusedProvider = {id: provider.id, name: typeof provider.name === 'string' && provider.name ? provider.name : provider.id};
-    $('provider-context').hidden = false;
-    $('provider-context-name').textContent = '当前供应商：' + focusedProvider.name;
-    $('clear-provider-context').hidden = providerPanel;
-    $('model-search').value = '';
-    $('models-selected-only').checked = false;
-    replaceProviderOptions(state.catalogProviders);
-    if (!isDirty()) {
-      const match = state.options.bindings.find(binding => binding.models.some(id => id.startsWith(focusedProvider.id + '/')));
-      if (match) { state.selected = match.id; drawList(); drawEditor(); }
-    }
-    drawModelPicker();
-  }
-
   async function boot() {
     try {
       if (!window.magpie || window.parent === window) throw new Error('请从 Magpie 的「插件」页面打开 KupaDesk。此页面不能在普通浏览器中保存设置。');
@@ -585,10 +564,6 @@
       try { loadCatalog(); }
       catch (_) { state.catalogReloadFailed = true; showCatalogStatus(); }
       drawAll();
-      if (window.magpie.context?.provider) focusProvider(window.magpie.context.provider);
-      window.magpie.onAction?.(action => {
-        if (action?.id === 'configure-provider-prompts') focusProvider(action.provider);
-      });
       startCatalogUpdates();
       // Remote settings may be applied by the plugin's private sync helper.
       // Never replace a draft the user is currently editing.
@@ -623,14 +598,6 @@
   }
 
   $('add-binding').addEventListener('click', safely(addBinding));
-  $('clear-provider-context').addEventListener('click', safely(() => {
-    if (providerPanel) return;
-    focusedProvider = null;
-    $('provider-context').hidden = true;
-    $('model-provider').value = '';
-    replaceProviderOptions(state.catalogProviders);
-    drawModelPicker();
-  }));
   $('empty-add-binding').addEventListener('click', safely(addBinding));
   $('copy-binding').addEventListener('click', safely(copyBinding));
   $('binding-search').addEventListener('input', safely(drawList));

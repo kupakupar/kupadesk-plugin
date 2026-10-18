@@ -37,6 +37,13 @@ const { JSDOM } = require(process.argv[2] || 'jsdom');
     win.setTheme({dark: false}); assert.equal(win.document.documentElement.dataset.theme, 'light');
     win.setTheme({dark: true}); assert.equal(win.document.documentElement.dataset.theme, 'dark');
     assert.match(win.document.getElementById('injection-info').textContent, /已生成提示词注入/);
-    console.log(JSON.stringify({savedLengths: [16001, 32768], oversizedDraftPreserved: true, themes: ['light', 'dark'], saves}));
+    edit('UNSAVED_DRAFT');
+    saved.bindings[0].name = 'Updated in another view';
+    button.click(); await wait(30);
+    assert.equal(saves, before, 'a stale draft must not overwrite newer settings');
+    assert.equal(saved.bindings[0].name, 'Updated in another view');
+    assert.equal(field.value, 'UNSAVED_DRAFT', 'a conflict must preserve the draft');
+    assert.match(win.document.getElementById('save-error').textContent, /其他页面或设备/);
+    console.log(JSON.stringify({savedLengths: [16001, 32768], oversizedDraftPreserved: true, concurrentEditProtected: true, themes: ['light', 'dark'], saves}));
   } finally {win.dispatchEvent(new win.Event('pagehide')); dom.window.close();}
 })().catch(error => {console.error(error); process.exitCode = 1;});

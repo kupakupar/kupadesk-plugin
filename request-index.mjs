@@ -37,7 +37,7 @@ export function buildRequestIndex(catalog, metadata = {}) {
   }
   // A bare model shared by vendors is an implicit group. The matcher only
   // injects when every possible target has the same prompt binding.
-  return {schemaVersion: 1, ready: true, providerHook: metadata.providerHook === true, models: [...models].sort(), aliases, groups};
+  return {schemaVersion: 1, ready: true, models: [...models].sort(), aliases, groups};
 }
 
 export async function initializeRequestIndex(directory, packageDir) {

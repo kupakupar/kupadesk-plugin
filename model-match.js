@@ -64,24 +64,3 @@ export function selectBinding(options, model, index) {
   if (hits.some(rows => rows[0] !== binding)) throw new Error('model_binding_ambiguous');
   return binding;
 }
-
-export function providerBinding(options, requested, provider, index) {
-  if (typeof provider?.id !== 'string' || !provider.id || typeof provider.model !== 'string' || !provider.model) {
-    throw new Error('provider_context_invalid');
-  }
-  const full = id => provider.model.startsWith(id + '/') ? provider.model : id + '/' + provider.model;
-  let model = full(provider.id);
-  const groups = canonicalModels(requested, index).filter(id => id.startsWith('group/'));
-  if (groups.length === 1) {
-    const explicit = selectBinding(options, groups[0], {...index, groups: {}});
-    if (explicit) return {binding: explicit, model};
-  }
-  let binding = selectBinding(options, model, index);
-  // Subscription account IDs may be individual seats; account names their
-  // provider kind. Never substitute a different key provider with a bare ID.
-  if (!binding && !(index?.models || []).includes(model) && typeof provider.account === 'string' && provider.account) {
-    model = full(provider.account);
-    binding = selectBinding(options, model, index);
-  }
-  return {binding, model};
-}

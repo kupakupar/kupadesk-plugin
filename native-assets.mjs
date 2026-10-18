@@ -213,23 +213,12 @@ async function preparePage(packageDir) {
 }
 
 async function renderPage(pageDir, template, key) {
-  const pages = [['index', template]];
-  try {
-    const file = path.join(pageDir, 'provider.template.html');
-    const stat = await fs.lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_ASSET) throw failure('native_assets_template_invalid');
-    const source = await fs.readFile(file, 'utf8');
-    if (!source.includes(MARKER)) throw failure('native_assets_template_invalid');
-    pages.push(['provider', source]);
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  for (const [name, source] of pages) {
   const temporary = path.join(pageDir, `.native-index.${process.pid}.${randomBytes(8).toString('hex')}.tmp`);
   try {
-    await fs.writeFile(temporary, source.replaceAll(MARKER, key), { flag: 'wx', mode: 0o600 });
-    await fs.rename(temporary, path.join(pageDir, name + '.html'));
+    await fs.writeFile(temporary, template.replaceAll(MARKER, key), { flag: 'wx', mode: 0o600 });
+    await fs.rename(temporary, path.join(pageDir, 'index.html'));
   } catch { throw failure('native_assets_index_unavailable'); }
   finally { await fs.unlink(temporary).catch(() => {}); }
-  }
 }
 
 // port/ownerCheckMs/healthTimeoutMs allow focused tests to use ephemeral

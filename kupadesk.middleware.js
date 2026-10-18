@@ -1,5 +1,5 @@
 import { REQUEST_INDEX } from './request-index.js';
-import { canonicalModels, selectBinding, providerBinding } from './model-match.js';
+import { selectBinding } from './model-match.js';
 
 // Prompts/options remain local. No license lease or remote prompt service.
 const START = "<!-- KUPADESK-NATIVE-PAGE-TEST:BEGIN -->";
@@ -121,77 +121,6 @@ function alreadyApplied(body, protocol, block, roleChoice, model) {
 
 function outcome(ctx, value) { if (ctx?.state) ctx.state.kupadeskOutcome = value; }
 
-function validPrompt(binding) {
-  return typeof binding.prompt === 'string' && binding.prompt.trim() && binding.prompt.length <= MAX_PROMPT_CHARS &&
-    !binding.prompt.includes(START) && !binding.prompt.includes(END) &&
-    ['auto', 'system', 'developer'].includes(binding.chatRole == null ? 'auto' : binding.chatRole);
-}
-
-function validateBindings(options, index) {
-  const used = new Map();
-  for (const binding of options.bindings) {
-    if (!binding || binding.enabled === false) continue;
-    if (!Array.isArray(binding.models)) throw new Error('invalid binding models');
-    if (!binding.models.length) continue;
-    if (!validPrompt(binding)) throw new Error('invalid prompt binding');
-    for (const model of binding.models) {
-      if (typeof model !== 'string' || !model.trim()) throw new Error('invalid binding model');
-      for (const id of canonicalModels(model, index)) {
-        if (used.has(id) && used.get(id) !== binding) throw new Error('duplicate prompt bindings');
-        used.set(id, binding);
-      }
-    }
-  }
-}
-
-function applyBinding(body, ctx, binding, model) {
-  if (!validPrompt(binding)) throw new Error('invalid prompt binding');
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('invalid request body');
-  const role = binding.chatRole == null ? 'auto' : binding.chatRole;
-  const block = START + '\n' + binding.prompt + '\n' + END;
-  if (alreadyApplied(body, ctx.protocol, block, role, model)) { outcome(ctx, 'already'); return; }
-  if (ctx.protocol === 'gemini' && body.systemInstruction && body.system_instruction) throw new Error('conflicting instruction fields');
-  const result = inject({...body}, ctx.protocol, block, role, model);
-  outcome(ctx, 'injected');
-  return result;
-}
-
-function removeManaged(body, protocol) {
-  // This also cleans a block inserted by an earlier request hook or an old
-  // conversation. An unbound fallback must not inherit another model's prompt.
-  if (!body || typeof body !== 'object') throw new Error('invalid request body');
-  const copy = {...body};
-  if (protocol === 'chat') copy.messages = cleanMessages(body.messages);
-  else if (protocol === 'responses') {
-    if (body.instructions != null) copy.instructions = cleanText(body.instructions);
-    if (Array.isArray(body.input)) copy.input = cleanMessages(body.input);
-  } else if (protocol === 'anthropic') {
-    if (body.system != null) copy.system = cleanContent(body.system);
-  } else if (protocol === 'gemini') {
-    for (const key of ['systemInstruction', 'system_instruction']) {
-      if (!body[key]) continue;
-      if (!Array.isArray(body[key].parts)) throw new Error('invalid system instruction');
-      copy[key] = {...body[key], parts: body[key].parts.map(part => typeof part?.text === 'string' ? {...part, text: cleanText(part.text)} : part)};
-    }
-  } else throw new Error('unsupported protocol');
-  return copy;
-}
-
-export function onProvider(body, ctx) {
-  if (!ctx?.options || ctx.options.enabled !== true) return;
-  try {
-    const index = ctx.modelIndex || REQUEST_INDEX;
-    const {binding, model} = providerBinding(ctx.options, ctx.model || body?.model, ctx.provider, index);
-    if (!binding) { outcome(ctx, 'unbound'); return removeManaged(body, ctx.protocol); }
-    return applyBinding(body, ctx, binding, model);
-  } catch {
-    outcome(ctx, 'invalid');
-    // onProvider cannot reject a routed request. Invalid settings are checked
-    // in onRequest first; a host failure here remains visible in its counters.
-    throw new Error('KupaDesk: actual provider prompt matching failed.');
-  }
-}
-
 export function onRequest(body, ctx) {
   const options = ctx && ctx.options;
   if (!options || options.enabled !== true) { outcome(ctx, 'disabled'); return; }
@@ -200,19 +129,24 @@ export function onRequest(body, ctx) {
   };
   try {
     if (options.schemaVersion !== 1 || !Array.isArray(options.bindings)) return reject("KupaDesk: invalid options schema.");
-    if ((ctx.modelIndex || REQUEST_INDEX).providerHook === true) {
-      try { validateBindings(options, ctx.modelIndex || REQUEST_INDEX); }
-      catch { outcome(ctx, 'invalid'); return reject('KupaDesk: invalid or duplicate active prompt bindings.'); }
-      outcome(ctx, 'deferred');
-      return;
-    }
     const model = typeof ctx.model === "string" && ctx.model ? ctx.model : body && body.model;
     if (typeof model !== "string" || !model) return;
     let binding;
     try { binding = selectBinding(options, model, ctx.modelIndex || REQUEST_INDEX); }
     catch { outcome(ctx, 'invalid'); return reject('KupaDesk: model binding is ambiguous. Use a full model ID or bind the whole routing group to one prompt.'); }
     if (!binding) { outcome(ctx, 'unbound'); return; }
-    return applyBinding(body, ctx, binding, model);
+    const prompt = binding.prompt;
+    const role = binding.chatRole == null ? "auto" : binding.chatRole;
+    if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS || prompt.includes(START) || prompt.includes(END) || !["auto", "system", "developer"].includes(role)) return reject("KupaDesk: invalid prompt binding.");
+    if (!body || typeof body !== "object" || Array.isArray(body)) return reject("KupaDesk: invalid request body.");
+    const block = START + "\n" + prompt + "\n" + END;
+    if (alreadyApplied(body, ctx.protocol, block, role, model)) { outcome(ctx, 'already'); return; }
+    if (ctx.protocol === 'gemini' && body.systemInstruction && body.system_instruction) return reject('KupaDesk: request contains two conflicting system instruction fields.');
+    // Only instruction containers are copied by inject/cleanMessages. Avoid
+    // cloning megabytes of conversation history inside the Go JS time budget.
+    const result = inject({...body}, ctx.protocol, block, role, model);
+    outcome(ctx, 'injected');
+    return result;
   } catch (_) {
     outcome(ctx, 'invalid');
     return reject("KupaDesk: unsupported or malformed instruction fields.");

@@ -20,13 +20,6 @@ function text(value, limit = 512) {
 }
 function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 
-export function supportsProviderHook(version) {
-  const match = typeof version === 'string' && version.match(/^v?(\d+)\.(\d+)\.(\d+)(?:$|[-+])/);
-  if (!match) return false;
-  const [, major, minor, patch] = match.map(Number);
-  return major > 0 || minor > 1 || (minor === 1 && patch >= 1283);
-}
-
 // Discover only this host's local listener. Never use PluginInput.serverUrl:
 // the OpenCode compatibility host gives it a fixed, unrelated port.
 export function gatewayURL(env = {}, settings = {}) {
@@ -209,16 +202,10 @@ export function startCatalogSync({ directory, packageDir, options = {}, env = pr
       controller = new AbortController();
       deadline = setTimeout(() => controller.abort(), timeout);
       deadline.unref?.();
-      let hostVersion = '';
-      try {
-        const hello = await readModels(new URL('/api/hello', url).href, fetchImpl, controller.signal);
-        if (hello?.name === 'magpie' && typeof hello.version === 'string') hostVersion = hello.version;
-      } catch { /* An older or temporarily unavailable hello keeps entry matching. */ }
-      names.providerHook = supportsProviderHook(hostVersion);
       const payload = await readModels(url, fetchImpl, controller.signal);
       const clean = normalizeCatalog(payload, names);
       await writeRequestIndex(packageDir, buildRequestIndex(clean, names));
-      last = { ...clean, importedAt: checkedAt, hostVersion, providerHook: names.providerHook };
+      last = { ...clean, importedAt: checkedAt };
     } catch (error) {
       if (stopped) return;
       status = last ? 'stale' : 'waiting';
@@ -231,11 +218,10 @@ export function startCatalogSync({ directory, packageDir, options = {}, env = pr
     const content = { providers: last?.providers ?? [], models: last?.models ?? [] };
     const hash = revision(content);
     const injection = injectionDiagnostics();
-    const signature = `${hash}:${status}:${errorCode ?? ''}:${last?.providerHook}:${JSON.stringify(injection)}`;
+    const signature = `${hash}:${status}:${errorCode ?? ''}:${JSON.stringify(injection)}`;
     if (signature === published && now() - lastWrite < HEARTBEAT_INTERVAL) return;
     const value = { schemaVersion: 1, mode: 'automatic', status, checkedAt,
       importedAt: last?.importedAt ?? '', revision: hash, source: '当前 Magpie', ...content, injection,
-      hostVersion: last?.hostVersion ?? '', providerHook: last?.providerHook === true,
       ...(errorCode ? { errorCode } : {}) };
     try {
       await writeCatalog(file, value);
