@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -17,6 +17,7 @@
     "request-index.mjs",
     "model-match.js",
     "diagnostics.mjs",
+    "diagnostics-ledger.mjs",
     "kupadesk.hooks.mjs"
   ],
   "magpie": {

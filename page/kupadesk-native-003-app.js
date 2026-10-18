@@ -15,6 +15,85 @@
   const controls = ['injection-enabled', 'add-binding', 'empty-add-binding', 'binding-search', 'copy-binding', 'manage-models', 'focus-editor'];
   const fieldIds = ['binding-name', 'binding-models', 'binding-prompt', 'binding-role', 'binding-enabled'];
   const pickerControls = ['model-search', 'model-provider', 'models-selected-only', 'select-visible-models', 'clear-selected-models'];
+  let diagnosticRows = [], selectedDiagnostic = '', diagnosticOptionSignature = '';
+
+  function diagnosticModelName(raw) {
+    let model = state.catalogById.get(raw);
+    if (!model && typeof raw === 'string') {
+      const base = raw.replace(/:(none|off|minimal|low|medium|high|xhigh|max)$/, '');
+      model = state.catalogById.get(base);
+      if (!model) {
+        const matches = state.catalog.filter(item => item.name === raw || item.id.split('/').slice(1).join('/') === raw);
+        if (matches.length === 1) model = matches[0];
+      }
+    }
+    return model ? model.name + (model.providerName ? ' · ' + model.providerName : '') : '模型名称暂不可用';
+  }
+
+  function diagnosticResult(row) {
+    if (row.outcome === 'disabled') return '提示词注入已关闭';
+    if (row.outcome === 'unbound') return '这个模型没有绑定提示词';
+    if (row.outcome === 'invalid') return '绑定或提示词检查未通过';
+    if (row.accepted === 'present') return '已确认加入本次请求';
+    if (row.accepted === 'missing') return '未确认到完整提示词';
+    if (row.accepted === 'unknown') return '暂时无法核对';
+    return '已生成提示词，等待核对';
+  }
+
+  function showRequestDiagnostics(check) {
+    diagnosticRows = Array.isArray(check?.recent) ? check.recent.filter(row => row && typeof row.id === 'string').slice(0, 12) : [];
+    const select = $('diagnostic-request');
+    const previous = selectedDiagnostic;
+    const signature = JSON.stringify(diagnosticRows.map(row => [row.id, row.at, diagnosticModelName(row.requested)]));
+    if (signature !== diagnosticOptionSignature) {
+      select.replaceChildren();
+      for (const row of diagnosticRows) {
+        const option = document.createElement('option');
+        option.value = row.id;
+        option.textContent = (catalogTime(row.at) || '时间未知') + ' · ' + diagnosticModelName(row.requested) + ' · 第 ' + row.id + ' 次';
+        select.append(option);
+      }
+      diagnosticOptionSignature = signature;
+    }
+    if (previous && diagnosticRows.some(row => row.id === previous)) select.value = previous;
+    select.disabled = !diagnosticRows.length;
+    drawRequestDiagnostic();
+  }
+
+  function drawRequestDiagnostic() {
+    const row = diagnosticRows.find(item => item.id === $('diagnostic-request').value);
+    $('diagnostic-empty').hidden = !!row;
+    $('diagnostic-fields').hidden = !row;
+    $('diagnostic-picker').hidden = !row;
+    if (!row) { $('diagnostic-summary').textContent = '等待请求'; return; }
+    const outcomes = {injected: '入口已生成注入', already: '入口已确认提示词存在',
+      unbound: '未绑定提示词', invalid: '入口检查失败', disabled: '注入已关闭'};
+    const accepted = {present: '宿主接受的请求含绑定提示词', missing: '宿主请求未确认到完整提示词',
+      unknown: '宿主请求格式无法核对', pending: '等待完成回调，尚未核对', 'not-bound': '无启用的绑定需要核对'};
+    const routes = {pending: '等待回复完成后核对', waiting: '等待本机用量记录',
+      missing: '本机暂无用量记录', unavailable: '本机用量记录暂不可读',
+      unconfirmed: '未找到对应记录，无法确认', 'no-response-id': '回复缺少 ID，无法确认',
+      ambiguous: '回复 ID 重复，无法唯一确认', mismatch: '记录信息不一致，无法确认'};
+    const binding = row.binding || {}, route = row.route || {};
+    $('diagnostic-summary').textContent = diagnosticResult(row) + ' · ' + diagnosticModelName(row.requested);
+    $('diagnostic-model').textContent = diagnosticModelName(row.requested);
+    $('diagnostic-result').textContent = diagnosticResult(row);
+    $('diagnostic-requested-id').textContent = row.requested || '未提供模型 ID';
+    $('diagnostic-binding').textContent = binding.state === 'matched' ? (binding.name || '未命名提示词') :
+      binding.state === 'ambiguous' ? '绑定有歧义，无法确认' : '无启用的匹配绑定';
+    $('diagnostic-bound-model').textContent = Array.isArray(binding.models) && binding.models.length ? binding.models.join('、') : '—';
+    const providerName = state.catalogProviders.get(route.provider);
+    $('diagnostic-provider').textContent = route.state === 'matched' ? providerName || '供应商名称暂不可用（可展开技术详情）' : routes[route.state] || '未知';
+    $('diagnostic-provider-id').textContent = route.state === 'matched' ? route.provider || '未提供供应商 ID' : '—';
+    $('diagnostic-served-model').textContent = route.state === 'matched' ? route.model || '模型 ID 未提供' : '—';
+    $('diagnostic-injection').textContent = outcomes[row.outcome] || '结果未知';
+    $('diagnostic-accepted').textContent = accepted[row.accepted] || '未核对';
+    $('diagnostic-completion').textContent = row.completion === 'success' ? '回复完成' :
+      row.completion === 'failed' ? '回复失败或不完整' : '尚未收到完成回调';
+    $('diagnostic-evidence').textContent = route.state === 'matched' ?
+      '已按回复 ID 对应同一次请求的本机用量记录' + (route.status ? ' · HTTP ' + route.status : '') :
+      '供应商只在回复 ID 唯一对应时显示；不根据模型名称猜测。';
+  }
 
   function showError(message) {
     $('save-error').textContent = message;
@@ -139,6 +218,7 @@
     // An unavailable backend must not erase the last readable directory.
     if (status !== 'ready' && state.catalog.length && raw.models.length === 0) {
       showCatalogStatus();
+      showRequestDiagnostics(check);
       return;
     }
     const providers = new Map();
@@ -173,6 +253,7 @@
       if (currentBinding()) drawModelPicker();
     }
     showCatalogStatus();
+    showRequestDiagnostics(check);
   }
 
   function refreshCatalog() {
@@ -666,6 +747,10 @@
   });
   $('binding-search').addEventListener('input', safely(drawList));
   $('refresh-catalog').addEventListener('click', safely(refreshCatalog));
+  $('diagnostic-request').addEventListener('change', safely(() => {
+    selectedDiagnostic = $('diagnostic-request').value;
+    drawRequestDiagnostic();
+  }));
   $('model-search').addEventListener('input', safely(drawModelPicker));
   $('model-provider').addEventListener('change', safely(() => {
     replaceProviderOptions(state.catalogProviders);

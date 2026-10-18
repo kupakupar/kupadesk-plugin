@@ -164,7 +164,7 @@ test('plugin initialization returns without making or waiting for a model reques
   const sourceDir = fileURLToPath(new URL('../', import.meta.url));
   // Exercise the real entry point and catalog scheduler without opening the
   // production asset port or generating an index in the source package.
-  for (const name of ['index.mjs', 'catalog-sync.mjs', 'request-index.mjs', 'diagnostics.mjs', 'settings-sync.mjs']) {
+  for (const name of ['index.mjs', 'catalog-sync.mjs', 'request-index.mjs', 'diagnostics.mjs', 'diagnostics-ledger.mjs', 'model-match.js', 'settings-sync.mjs']) {
     await fs.copyFile(path.join(sourceDir, name), path.join(f.packageDir, name));
   }
   await fs.writeFile(path.join(f.packageDir, 'native-assets.mjs'),

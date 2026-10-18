@@ -16,7 +16,7 @@
     <header class="page-header">
       <div class="brand">
         <img src="kupadesk-native-003-icon.svg?kupaAsset=__KUPADESK_ASSET_NONCE__" width="32" height="32" alt="">
-        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">0.0.9</span></div><p>提示词库 · 按模型应用</p></div>
+        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">0.0.10</span></div><p>提示词库 · 按模型应用</p></div>
       </div>
       <span class="connection-label" id="connection-label">正在连接 Magpie</span>
     </header>
@@ -33,6 +33,32 @@
         </div>
       </details>
     </section>
+    <details class="request-diagnostics" id="request-diagnostics">
+      <summary>请求诊断 <span id="diagnostic-summary">等待请求</span></summary>
+      <div class="diagnostic-content">
+        <p id="diagnostic-empty" class="field-help">发出请求后，这里会显示绑定匹配与注入结果；回复完成后核对实际供应商。仅保留本次插件运行中的最近请求。</p>
+        <label id="diagnostic-picker" class="diagnostic-picker" hidden>查看请求<select id="diagnostic-request" disabled></select></label>
+        <div id="diagnostic-fields" hidden>
+          <dl class="diagnostic-grid">
+            <div><dt>你选的模型</dt><dd id="diagnostic-model"></dd></div>
+            <div><dt>使用的提示词</dt><dd id="diagnostic-binding"></dd></div>
+            <div><dt>实际供应商</dt><dd id="diagnostic-provider"></dd></div>
+            <div><dt>提示词是否加入</dt><dd id="diagnostic-result"></dd></div>
+          </dl>
+          <details class="diagnostic-technical"><summary>技术详情</summary><dl class="diagnostic-grid">
+            <div><dt>请求模型 ID</dt><dd id="diagnostic-requested-id"></dd></div>
+            <div><dt>提示词绑定的模型 ID</dt><dd id="diagnostic-bound-model"></dd></div>
+            <div><dt>实际供应商 ID</dt><dd id="diagnostic-provider-id"></dd></div>
+            <div><dt>发送给供应商的模型 ID</dt><dd id="diagnostic-served-model"></dd></div>
+            <div><dt>入口注入结果</dt><dd id="diagnostic-injection"></dd></div>
+            <div><dt>宿主请求检查</dt><dd id="diagnostic-accepted"></dd></div>
+            <div><dt>回复状态</dt><dd id="diagnostic-completion"></dd></div>
+          </dl></details>
+        </div>
+        <p id="diagnostic-evidence" class="field-help">供应商只在回复 ID 唯一对应时显示；不根据模型名称猜测。</p>
+        <p class="field-help">“宿主请求含提示词”表示宿主接受的请求包含完整绑定提示词，不代表模型一定遵循。此处不展示提示词或对话正文。</p>
+      </div>
+    </details>
     <div class="workspace">
       <aside class="binding-sidebar" aria-labelledby="bindings-heading">
         <div class="section-heading"><h2 id="bindings-heading">提示词库 <span id="binding-count" class="count">0</span></h2><button id="add-binding" class="button button-subtle" type="button" disabled>新建</button></div>

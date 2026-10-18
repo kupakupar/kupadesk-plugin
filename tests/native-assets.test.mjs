@@ -84,7 +84,8 @@ test('Windows listener serves only nonce-protected namespaced assets on both loo
   const html = await fs.readFile(path.join(f.pageDir, 'index.html'), 'utf8');
   assert.equal(html.includes('__KUPADESK_ASSET_NONCE__'), false);
   assert.equal(html.includes(key), true);
-  assert.equal((await fs.readFile(path.join(f.pageDir, 'provider.html'),'utf8')).includes(key),true);
+  // 008/009 intentionally stopped registering or rendering a provider panel.
+  await assert.rejects(fs.readFile(path.join(f.pageDir, 'provider.html')), {code: 'ENOENT'});
 });
 
 test('wrong Host, nonce, method and non-allowlisted or normalized paths never expose files', async (t) => {

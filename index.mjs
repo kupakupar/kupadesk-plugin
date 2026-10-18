@@ -3,6 +3,7 @@ import { startCatalogSync } from './catalog-sync.mjs';
 import { startNativeAssets } from './native-assets.mjs';
 import { startSettingsSync } from './settings-sync.mjs';
 import { initializeRequestIndex } from './request-index.mjs';
+import { startDiagnosticsLedger } from './diagnostics-ledger.mjs';
 
 export default async function KupaDeskNativePage(input, options = {}) {
   const packageDir = fileURLToPath(new URL('.', import.meta.url));
@@ -31,5 +32,7 @@ export default async function KupaDeskNativePage(input, options = {}) {
     // Catalog discovery must not interfere with requests or plugin startup.
   }
   startSettingsSync({directory:input?.directory,log});
+  try { startDiagnosticsLedger({directory:input?.directory}); }
+  catch { log('diagnostics_unavailable'); }
   return {};
 }

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import {onRequest as inject} from './kupadesk.middleware.js';
-import {recordOutcome} from './diagnostics.mjs';
+import {recordOutcome, recordCompletion} from './diagnostics.mjs';
 
 let cached;
 let checked = 0;
@@ -17,22 +17,25 @@ async function modelIndex() {
 }
 
 export async function onRequest(body, ctx) {
+  let index;
   try {
-    let index;
     try { index = await modelIndex(); } catch { index = cached; }
     const state = {};
     const result = inject(body, {...ctx, state, modelIndex: index,
       reject() { throw new Error('prompt_binding_invalid'); }});
     const outcome = state.kupadeskOutcome || 'invalid';
-    recordOutcome(outcome);
+    recordOutcome(outcome, {ctx, index});
     ctx.report?.(outcome === 'unbound' ? 'unbound' : outcome === 'invalid' ? 'invalid'
       : outcome === 'disabled' ? 'skipped' : 'ready');
     return result;
   } catch {
-    recordOutcome('invalid');
+    recordOutcome('invalid', {ctx, index});
     ctx.report?.('invalid');
     // The synchronous guard reports a request error for invalid bindings.
     // The host rolls this hook back, then runs that guard.
     throw new Error('KupaDesk prompt binding validation failed');
   }
 }
+
+// Best-effort observation only: no response rewrite or second injection.
+export function onResponse(reply, ctx) { recordCompletion(reply, ctx); }

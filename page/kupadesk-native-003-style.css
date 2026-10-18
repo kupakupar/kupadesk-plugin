@@ -1,3 +1,16 @@
+.request-diagnostics { flex: 0 0 auto; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.request-diagnostics > summary { padding: 9px 12px; font-size: 12px; font-weight: 600; }
+#diagnostic-summary { margin-left: 8px; color: var(--secondary); font-size: 11px; font-weight: 400; overflow-wrap: anywhere; }
+.diagnostic-content { padding: 0 12px 12px; max-height: min(45dvh, 420px); overflow: auto; overscroll-behavior: contain; }
+.diagnostic-picker { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 11px; color: var(--secondary); margin: 4px 0 12px; }
+.diagnostic-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; margin: 12px 0; }
+.diagnostic-grid dt { font-size: 11px; color: var(--secondary); }
+.diagnostic-grid dd { margin: 3px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.diagnostic-content > .field-help { margin-top: 8px; }
+.diagnostic-technical { border-top: 1px solid var(--border); padding-top: 8px; color: var(--secondary); font-size: 11px; }
+.app-shell[data-focus="true"] > .request-diagnostics { display: none; }
+@media (max-width: 500px) { .diagnostic-grid { grid-template-columns: minmax(0, 1fr); } }
+
 :root {
   color-scheme: light;
   --fallback-bg: #f5f5f7; --fallback-card: #fff; --fallback-fg: #202025;

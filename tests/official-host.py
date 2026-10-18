@@ -37,20 +37,25 @@ def check_host(executable, bun, fallback=False):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             received.append({'path': self.path, 'body': body})
+            response_id = 'fixture_' + str(len(received))
             message = {'role': 'assistant', 'content': 'fixture'}
+            tool_reply = bool(body.get('tools')) and not any(m.get('role') == 'tool' for m in body.get('messages', []))
+            if tool_reply:
+                message = {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_fixture', 'type': 'function',
+                           'function': {'name': 'read_fixture', 'arguments': '{"path":"fixture.txt"}'}}]}
             if body.get('stream'):
                 chunks = [
-                    {'id': 'fixture', 'object': 'chat.completion.chunk', 'model': 'fixture',
+                    {'id': response_id, 'object': 'chat.completion.chunk', 'model': 'fixture',
                      'choices': [{'index': 0, 'delta': message, 'finish_reason': None}]},
-                    {'id': 'fixture', 'object': 'chat.completion.chunk', 'model': 'fixture',
-                     'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}],
+                    {'id': response_id, 'object': 'chat.completion.chunk', 'model': 'fixture',
+                     'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'tool_calls' if tool_reply else 'stop'}],
                      'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}},
                 ]
                 raw = ''.join('data: ' + json.dumps(row) + '\n\n' for row in chunks).encode() + b'data: [DONE]\n\n'
                 kind = 'text/event-stream'
             else:
-                raw = json.dumps({'id': 'fixture', 'object': 'chat.completion', 'model': 'fixture',
-                                  'choices': [{'index': 0, 'message': message, 'finish_reason': 'stop'}],
+                raw = json.dumps({'id': response_id, 'object': 'chat.completion', 'model': 'fixture',
+                                  'choices': [{'index': 0, 'message': message, 'finish_reason': 'tool_calls' if tool_reply else 'stop'}],
                                   'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}}).encode()
                 kind = 'application/json'
             self.send_response(200)
@@ -120,6 +125,7 @@ def check_host(executable, bun, fallback=False):
         else:
             assert len(received) == before, (label, 'invalid request reached upstream')
         results.append({'case': label, 'status': status, 'fallback': fallback})
+        return reply
 
     def chat(model, extra=''):
         return {'model': model, 'messages': [{'role': 'system', 'content': 'ORIGINAL_SYSTEM'},
@@ -147,6 +153,21 @@ def check_host(executable, bun, fallback=False):
                                     'messages': [{'role': 'user', 'content': 'FIXTURE_USER'}], 'max_tokens': 8}, '/v1/messages')
         request('responses client', {'model': 'unique', 'instructions': 'ORIGINAL_SYSTEM',
                                     'input': 'FIXTURE_USER', 'max_output_tokens': 8}, '/v1/responses')
+        request('streaming chat', {**chat('one/unique'), 'stream': True})
+        tool = {'type': 'function', 'function': {'name': 'read_fixture', 'parameters': {'type': 'object', 'properties': {'path': {'type': 'string'}}}}}
+        tools_body = {**chat('one/unique'), 'tools': [tool], 'tool_choice': 'auto'}
+        tool_reply = request('chat tool call', tools_body)
+        assert b'read_fixture' in tool_reply, 'tool call lost from client reply'
+        assert received[-1]['body']['tools'] == tools_body['tools'], 'tool declaration changed'
+        assert received[-1]['body']['tool_choice'] == 'auto', 'tool choice changed'
+        followup = {**tools_body, 'messages': tools_body['messages'] + [
+            {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'call_fixture', 'type': 'function', 'function': {'name': 'read_fixture', 'arguments': '{"path":"fixture.txt"}'}}]},
+            {'role': 'tool', 'tool_call_id': 'call_fixture', 'content': 'fixture file content'}]}
+        request('tool result followup', followup)
+        responses_tool = {'type': 'function', 'name': 'read_fixture', 'parameters': tool['function']['parameters']}
+        responses_reply = request('responses tool call stream', {'model': 'one/unique', 'instructions': 'ORIGINAL_SYSTEM',
+            'input': 'FIXTURE_USER', 'tools': [responses_tool], 'stream': True}, '/v1/responses')
+        assert b'read_fixture' in responses_reply, 'Responses tool call lost'
         request('gemini client', {'systemInstruction': {'parts': [{'text': 'ORIGINAL_SYSTEM'}]},
                                  'contents': [{'role': 'user', 'parts': [{'text': 'FIXTURE_USER'}]}]},
                 '/v1beta/models/one/unique:generateContent')
@@ -162,17 +183,28 @@ def check_host(executable, bun, fallback=False):
             raise AssertionError('model index did not refresh after provider change')
         request('new model without restart', chat('later'))
         if not fallback:
-            for _ in range(35):
+            for _ in range(70):
                 source = (package / 'page/kupadesk-native-003-model-catalog.js').read_text(encoding='utf-8')
                 try:
                     value = json.loads(source.split('window.KUPADESK_MODEL_CATALOG = ', 1)[1].rsplit(';', 1)[0])
                 except (ValueError, IndexError):
                     value = {}
-                if value.get('injection', {}).get('totals', {}).get('injected', 0) >= 5:
+                check = value.get('injection', {})
+                last = check.get('last') or {}
+                if (check.get('totals', {}).get('injected', 0) >= 5 and
+                        last.get('route', {}).get('state') == 'matched' and last.get('requested') == 'later'):
                     break
                 time.sleep(.3)
             else:
-                raise AssertionError('Bun injection diagnostics never observed successful hooks')
+                safe = {'outcome': last.get('outcome'), 'requested': last.get('requested'),
+                        'agent': last.get('agent'), 'accepted': last.get('accepted'),
+                        'route': last.get('route'), 'ledger': check.get('ledger')}
+                raise AssertionError('diagnostics never matched real host route: ' + json.dumps(safe))
+            assert last['accepted'] == 'present', last.get('accepted')
+            assert last['route']['provider'] == 'one', last['route']
+            assert last['route']['model'] == 'later', last['route']
+            assert last['binding']['id'] == 'one', last.get('binding')
+            results.append({'case': 'real reply ID joins injection and provider', 'status': 200, 'fallback': False})
         print(json.dumps({'results': results, 'temporaryProfile': str(root), 'officialSHA256': digest}))
         return results
     finally:

@@ -9,7 +9,7 @@ import urllib.parse
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PAGE = ROOT / 'page'
-PRIVATE = ROOT.parent / 'kupadesk-009-preview-private'
+PRIVATE = ROOT.parent / 'kupadesk-diagnostics-preview-private'
 LIVE = pathlib.Path.home() / '.config' / 'magpie'
 PUBLIC_ASSETS = {p.name for p in PAGE.iterdir() if p.is_file()}
 LOCK = threading.Lock()
@@ -69,7 +69,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             name = route.rsplit('/', 1)[-1]
             target = PRIVATE / 'catalog.js' if name == 'kupadesk-native-003-model-catalog.js' else PAGE / name
             kind = {'js': 'text/javascript', 'css': 'text/css', 'html': 'text/html', 'svg': 'image/svg+xml'}.get(name.rsplit('.', 1)[-1], 'application/octet-stream')
-            return self.reply(200, target.read_bytes(), kind + '; charset=utf-8')
+            data = target.read_bytes()
+            diagnostics = PRIVATE / 'diagnostics.json'
+            if name == 'kupadesk-native-003-model-catalog.js' and diagnostics.exists():
+                source = data.decode('utf-8')
+                value = json.loads(source.split('window.KUPADESK_MODEL_CATALOG = ', 1)[1].rsplit(';', 1)[0])
+                value['injection'] = json.loads(diagnostics.read_text(encoding='utf-8'))
+                data = ('window.KUPADESK_MODEL_CATALOG = ' + json.dumps(value, ensure_ascii=True) + ';\n').encode('utf-8')
+            return self.reply(200, data, kind + '; charset=utf-8')
         return self.reply(404, b'{}')
 
     def do_POST(self):
@@ -94,7 +101,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--port', type=int, default=4691)
+    parser.add_argument('--port', type=int, default=4692)
     args = parser.parse_args()
     options = initialize()
     print(json.dumps({'preview': f'http://127.0.0.1:{args.port}/', 'prompts': len(options.get('bindings', [])), 'bindings': sum(len(x.get('models', [])) for x in options.get('bindings', [])), 'productionWrites': False}), flush=True)
