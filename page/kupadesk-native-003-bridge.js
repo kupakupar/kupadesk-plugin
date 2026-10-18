@@ -1,4 +1,5 @@
-// Official Magpie plugin page SDK, unchanged below.
+// Based on the official Magpie plugin page SDK. Refresh compatibility only:
+// RPC identifiers include a document nonce so late replies cannot cross reloads.
 // Source: https://github.com/yetone/magpie/blob/v0.1.1273/internal/gui/pagebridge.js
 // The page's side of a plugin page's messages to magpie's window
 // (docs/subsystems/plugin-runtime.md, P4). A plugin's page loads it with
@@ -20,9 +21,11 @@
 (() => {
   const waiting = new Map();
   let next = 0;
+  const session = [...crypto.getRandomValues(new Uint32Array(4))]
+    .map(value => value.toString(16).padStart(8, '0')).join('');
   const themed = [];
   function call(method, params) {
-    const id = ++next;
+    const id = session + ':' + ++next;
     return new Promise((resolve, reject) => {
       waiting.set(id, { resolve, reject });
       parent.postMessage({ magpie: 1, id, method, params }, "*");

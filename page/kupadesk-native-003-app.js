@@ -16,6 +16,7 @@
   const fieldIds = ['binding-name', 'binding-models', 'binding-prompt', 'binding-role', 'binding-enabled'];
   const pickerControls = ['model-search', 'model-provider', 'models-selected-only', 'select-visible-models', 'clear-selected-models'];
   let diagnosticRows = [], selectedDiagnostic = '', diagnosticOptionSignature = '';
+  let refreshing = false, refreshTimer = null;
 
   function diagnosticModelName(raw) {
     let model = state.catalogById.get(raw);
@@ -309,6 +310,7 @@
     clearInterval(state.catalogTimer);
     clearTimeout(state.catalogRequestTimer);
     clearTimeout(state.cooldown);
+    clearTimeout(refreshTimer);
     if (state.catalogScript) {
       state.catalogScript.onload = null;
       state.catalogScript.onerror = null;
@@ -635,7 +637,7 @@
 
   function setSaving(saving) {
     state.saving = saving;
-    $('refresh-page').disabled = saving;
+    $('refresh-page').disabled = saving || refreshing;
     for (const id of controls.concat(fieldIds, pickerControls, ['delete-binding'])) $(id).disabled = saving || !state.connected;
     for (const button of $('binding-list').querySelectorAll('button')) button.disabled = saving;
     if (currentBinding()) drawModelPicker();
@@ -677,7 +679,7 @@
   }
 
   function refreshPage() {
-    if (state.saving) return;
+    if (state.saving || refreshing) return;
     if (isDirty()) {
       showError('有未保存的修改，请先保存设置或还原修改，再刷新页面。');
       $('save-options').focus();
@@ -695,9 +697,27 @@
       }
       next.hash = '';
       next.searchParams.set('fresh', String(Date.now()));
+      refreshing = true;
+      $('refresh-page').disabled = true;
+      $('refresh-page').textContent = '正在刷新…';
+      // A document that actually navigates is destroyed with its timers. If
+      // navigation is blocked, release the button without queuing more loads.
+      refreshTimer = setTimeout(() => {
+        if (state.disposed) return;
+        resetRefresh();
+        showError('页面刷新未完成，请稍后重试。');
+      }, 8000);
       window.location.replace(next.href);
     }
-    catch { showError('页面暂时无法刷新，请稍后再试。'); }
+    catch { resetRefresh(); showError('页面暂时无法刷新，请稍后再试。'); }
+  }
+
+  function resetRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+    refreshing = false;
+    $('refresh-page').disabled = state.saving;
+    $('refresh-page').textContent = '刷新页面';
   }
 
   async function boot() {

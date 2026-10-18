@@ -32,14 +32,21 @@ async function fixture(connected = true, native = false) {
 }
 
 (async () => {
+  const rapid = await fixture();
+  try {
+    for (let n = 0; n < 25; n++) rapid.$('refresh-page').click();
+    rapid.$('refresh-page').dispatchEvent(new rapid.win.MouseEvent('click', {bubbles: true}));
+    assert.equal(rapid.reloads(), 1, 'rapid clicks must start only one navigation');
+    assert.equal(rapid.$('refresh-page').disabled, true);
+    assert.ok(rapid.$('refresh-page').textContent.includes('正在刷新'));
+    assert.equal(rapid.writes(), 0);
+  } finally {rapid.close();}
   const f = await fixture();
   try {
-    f.$('refresh-page').click(); assert.equal(f.reloads(), 1, 'a clean page requests a document reload');
-    assert.equal(f.writes(), 0, 'refresh does not save or alter settings');
     f.$('binding-prompt').value = 'UNSAVED'.repeat(5000);
     f.$('binding-prompt').dispatchEvent(new f.win.Event('input', {bubbles: true}));
     f.$('refresh-page').click();
-    assert.equal(f.reloads(), 1, 'unsaved and oversized drafts block navigation');
+    assert.equal(f.reloads(), 0, 'unsaved and oversized drafts block navigation');
     assert.equal(f.$('binding-prompt').value.length, 35000, 'the full draft is preserved');
     assert.ok(f.$('save-error').textContent.includes('先保存设置或还原修改'));
     f.$('discard-changes').click();
@@ -47,10 +54,10 @@ async function fixture(connected = true, native = false) {
     f.$('binding-prompt').value = 'SAVE_THIS'; f.$('binding-prompt').dispatchEvent(new f.win.Event('input', {bubbles: true}));
     f.$('save-options').click(); await wait(10);
     assert.equal(f.$('refresh-page').disabled, true, 'a pending save blocks refresh');
-    f.$('refresh-page').click(); assert.equal(f.reloads(), 1);
+    f.$('refresh-page').click(); assert.equal(f.reloads(), 0);
     f.finishSave(); await wait(20);
     assert.equal(f.$('refresh-page').disabled, false);
-    f.$('refresh-page').click(); assert.equal(f.reloads(), 2);
+    f.$('refresh-page').click(); assert.equal(f.reloads(), 1);
     assert.equal(f.saved().bindings[0].prompt, 'SAVE_THIS');
     assert.deepEqual(f.saved().bindings[0].models, ['one/a']);
   } finally {f.close();}
@@ -64,11 +71,24 @@ async function fixture(connected = true, native = false) {
   try {
     native.$('refresh-page').click(); assert.equal(native.reloads(), 1, 'native page navigates through the authenticated page refresh route');
     assert.equal(native.writes(), 0);
-    native.win.document.querySelectorAll('script').forEach(script => script.remove());
-    native.$('refresh-page').click();
-    assert.equal(native.reloads(), 1, 'missing native capability does not navigate to a blank page');
-    assert.ok(native.$('save-error').textContent.includes('暂时无法刷新'));
   } finally {native.close();}
-  console.log(JSON.stringify({cleanReload: true, unsavedDraftProtected: true, pendingSaveProtected: true,
+  const unavailable = await fixture(true, true);
+  try {
+    unavailable.win.document.querySelectorAll('script').forEach(script => script.remove());
+    unavailable.$('refresh-page').click();
+    assert.equal(unavailable.reloads(), 0, 'missing native capability does not navigate to a blank page');
+    assert.ok(unavailable.$('save-error').textContent.includes('暂时无法刷新'));
+    assert.equal(unavailable.$('refresh-page').disabled, false);
+  } finally {unavailable.close();}
+  const blocked = await fixture();
+  try {
+    blocked.$('refresh-page').click();
+    await wait(8100);
+    assert.equal(blocked.$('refresh-page').disabled, false, 'a blocked navigation releases the button after its timeout');
+    assert.ok(blocked.$('save-error').textContent.includes('刷新未完成'));
+    blocked.$('refresh-page').click();
+    assert.equal(blocked.reloads(), 2, 'the user can retry a blocked navigation');
+  } finally {blocked.close();}
+  console.log(JSON.stringify({cleanReload: true, singleNavigation: true, blockedNavigationRecovery: true, unsavedDraftProtected: true, pendingSaveProtected: true,
     refreshAfterSave: true, offlineRecovery: true, bindingsPreserved: true}));
 })().catch(error => {console.error(error); process.exitCode = 1;});
