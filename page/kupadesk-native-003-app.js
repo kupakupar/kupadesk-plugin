@@ -635,6 +635,7 @@
 
   function setSaving(saving) {
     state.saving = saving;
+    $('refresh-page').disabled = saving;
     for (const id of controls.concat(fieldIds, pickerControls, ['delete-binding'])) $(id).disabled = saving || !state.connected;
     for (const button of $('binding-list').querySelectorAll('button')) button.disabled = saving;
     if (currentBinding()) drawModelPicker();
@@ -673,6 +674,17 @@
   function themeChanged(theme) {
     document.documentElement.dataset.theme = theme?.dark ? 'dark' : 'light';
     document.documentElement.style.colorScheme = theme?.dark ? 'dark' : 'light';
+  }
+
+  function refreshPage() {
+    if (state.saving) return;
+    if (isDirty()) {
+      showError('有未保存的修改，请先保存设置或还原修改，再刷新页面。');
+      $('save-options').focus();
+      return;
+    }
+    try { window.location.reload(); }
+    catch { showError('页面暂时无法刷新，请稍后再试。'); }
   }
 
   async function boot() {
@@ -730,6 +742,7 @@
   }
 
   $('add-binding').addEventListener('click', safely(addBinding));
+  $('refresh-page').addEventListener('click', safely(refreshPage));
   $('empty-add-binding').addEventListener('click', safely(addBinding));
   $('copy-binding').addEventListener('click', safely(copyBinding));
   $('manage-models').addEventListener('click', safely(openModelDrawer));
