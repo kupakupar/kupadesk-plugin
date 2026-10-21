@@ -91,6 +91,53 @@ test('changed prompts replace old blocks and preexisting developer instructions 
   expect(JSON.stringify(second.body).split(START).length - 1).toBe(1);
 });
 
+test('Responses Lite additional_tools developer items survive injection and retry', () => {
+  // Captured from Codex 0.163.0-alpha.11: this developer item has tools,
+  // rather than message content. Dropping it leaves the model no tools.
+  const additional = {type: 'additional_tools', id: 'at_fixture', role: 'developer', tools: [
+    {type: 'namespace', name: 'functions', tools: [
+      {type: 'custom', name: 'exec', format: {type: 'text'}},
+      {type: 'function', name: 'wait', parameters: {type: 'object'}},
+    ]},
+  ]};
+  const body = {model: 'one/unique', input: [additional,
+    {type: 'message', role: 'developer', content: [{type: 'input_text', text: 'ORIGINAL'}]},
+    {role: 'user', content: 'QUESTION'},
+  ], tool_choice: 'auto', parallel_tool_calls: true};
+  const before = JSON.stringify(body);
+  const first = run(body, [binding(['one/unique'])], 'responses');
+  expect(first.error).toBeUndefined();
+  expect(first.body.input[0]).toBe(additional);
+  expect(first.body.input[0].tools).toBe(additional.tools);
+  expect(first.body.input[1].content).toEqual(body.input[1].content);
+  expect(first.body.tool_choice).toBe('auto');
+  expect(first.body.parallel_tool_calls).toBe(true);
+  expect(JSON.stringify(body)).toBe(before);
+  const second = run(first.body, [binding(['one/unique'])], 'responses');
+  expect(second.result).toBeUndefined();
+  expect(second.body.input[0]).toBe(additional);
+});
+
+test('replacing a Responses prompt cleans message items and preserves tool declarations', () => {
+  const additional = {type: 'additional_tools', role: 'developer', tools: [
+    {type: 'namespace', name: 'functions', tools: [
+      {type: 'function', name: 'read', parameters: {type: 'object'}},
+    ]},
+  ]};
+  const body = {model: 'one/unique', input: [additional,
+    {type: 'message', role: 'developer', content: 'ORIGINAL'},
+    {role: 'user', content: 'QUESTION'},
+  ]};
+  const first = run(body, [binding(['one/unique'], 'OLD')], 'responses');
+  const next = run(first.body, [binding(['one/unique'], 'NEW')], 'responses');
+  expect(next.error).toBeUndefined();
+  expect(next.body.input[0]).toBe(additional);
+  expect(next.body.input[1]).toEqual(body.input[1]);
+  expect(next.body.instructions).toContain('\nNEW\n');
+  expect(next.body.instructions).not.toContain('\nOLD\n');
+  expect(next.body.instructions.split(START).length - 1).toBe(1);
+});
+
 test('length, duplicate bindings and malformed instructions are explicit errors', () => {
   const body = chat('one/unique');
   expect(run(body, [binding(['one/unique'], 'x'.repeat(32768))]).error).toBeUndefined();

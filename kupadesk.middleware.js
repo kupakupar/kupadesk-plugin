@@ -37,12 +37,19 @@ function cleanContent(value) {
   return result;
 }
 
+function isInstructionMessage(message) {
+  // Responses Lite also uses role: developer on additional_tools items.
+  // Only actual messages have instruction content that we may rewrite.
+  return message != null && (message.type == null || message.type === "message") &&
+    (message.role === "system" || message.role === "developer");
+}
+
 function cleanMessages(messages) {
   if (!Array.isArray(messages)) throw new Error("invalid messages");
   const result = [];
   for (const message of messages) {
     if (!message || typeof message !== "object" || Array.isArray(message)) throw new Error("invalid message");
-    if (message.role !== "system" && message.role !== "developer") {
+    if (!isInstructionMessage(message)) {
       result.push(message);
       continue;
     }
@@ -95,12 +102,12 @@ function alreadyApplied(body, protocol, block, roleChoice, model) {
   if (protocol === 'chat' && Array.isArray(body?.messages)) {
     const developer = body.messages.some(m => m?.role === 'developer') || /(^|\/)(o1|o3|o4|gpt-5|gpt-6)/i.test(model);
     const role = roleChoice === 'auto' ? (developer ? 'developer' : 'system') : roleChoice;
-    fields = body.messages.filter(m => m?.role === 'system' || m?.role === 'developer')
+    fields = body.messages.filter(isInstructionMessage)
       .map(m => ({content: m.content, eligible: m.role === role}));
   } else if (protocol === 'responses') {
     fields = [{content: body?.instructions, eligible: true}];
     if (Array.isArray(body?.input)) fields = fields.concat(body.input
-      .filter(m => m?.role === 'system' || m?.role === 'developer').map(m => ({content: m.content, eligible: false})));
+      .filter(isInstructionMessage).map(m => ({content: m.content, eligible: false})));
   } else if (protocol === 'anthropic') fields = [{content: body?.system, eligible: true}];
   else if (protocol === 'gemini') {
     if (body?.systemInstruction && body?.system_instruction) return false;
