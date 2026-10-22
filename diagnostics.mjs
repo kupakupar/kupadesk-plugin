@@ -1,8 +1,7 @@
 import {createHash} from 'node:crypto';
 import {canonicalModels, selectBinding} from './model-match.js';
+import {readManagedText} from './managed-prompt.js';
 
-const START = '<!-- KUPADESK-NATIVE-PAGE-TEST:BEGIN -->';
-const END = '<!-- KUPADESK-NATIVE-PAGE-TEST:END -->';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const text = (value, max = 256) => typeof value === 'string' && value.length <= max &&
   !/[\u0000-\u001f\u007f]/u.test(value) ? value : '';
@@ -22,20 +21,20 @@ function instructionCheck(body, protocol, expected) {
     for (const m of body.messages) if (m?.role === 'system' || m?.role === 'developer') fields.push(m.content);
   } else if (protocol === 'gemini') fields.push(body.systemInstruction?.parts, body.system_instruction?.parts);
   else return 'unknown';
-  let starts = 0, ends = 0, matches = 0, inspected = 0;
+  let count = 0, matches = 0, inspected = 0;
   for (const field of fields) {
     const parts = typeof field === 'string' ? [field] : Array.isArray(field)
       ? field.filter(p => typeof p?.text === 'string').map(p => p.text) : [];
     for (const part of parts) {
       inspected += part.length;
       if (inspected > 1024 * 1024) return 'unknown';
-      starts += part.split(START).length - 1;
-      ends += part.split(END).length - 1;
-      const begin = part.indexOf(START + '\n'), end = part.indexOf('\n' + END, begin + START.length);
-      if (begin >= 0 && end >= 0 && digest(part.slice(begin + START.length + 1, end)) === expected) matches++;
+      const managed = readManagedText(part);
+      if (!managed) continue;
+      count++;
+      if (digest(managed.prompt) === expected) matches++;
     }
   }
-  return starts === 1 && ends === 1 && matches === 1 ? 'present' : 'missing';
+  return count === 1 && matches === 1 ? 'present' : 'missing';
 }
 
 export function createDiagnostics({now = Date.now, limit = 30} = {}) {

@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -16,6 +16,7 @@
     "request-index.js",
     "request-index.mjs",
     "model-match.js",
+    "managed-prompt.js",
     "diagnostics.mjs",
     "diagnostics-ledger.mjs",
     "kupadesk.hooks.mjs"
