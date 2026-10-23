@@ -1,4 +1,8 @@
 'use strict';
+document.title = 'KupaDesk 016 · 独立预览';
+document.querySelector('header strong').textContent = 'KupaDesk 016 · 独立预览';
+document.querySelector('header p').textContent = document.querySelector('meta[name="preview-data"]')?.content === 'synthetic'
+  ? '示例数据 · 仅供界面验收，不是你的真实请求' : '设置副本 · 不会写入现用 015';
 const frame = document.getElementById('plugin-preview');
 const themeControl = document.getElementById('preview-theme');
 const theme = () => ({dark: themeControl.value === 'dark', lang: 'zh-CN'});

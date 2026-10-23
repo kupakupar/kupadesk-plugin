@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -19,6 +19,7 @@
     "managed-prompt.js",
     "diagnostics.mjs",
     "diagnostics-ledger.mjs",
+    "request-check.mjs",
     "kupadesk.hooks.mjs"
   ],
   "magpie": {

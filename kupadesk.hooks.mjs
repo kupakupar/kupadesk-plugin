@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import {onRequest as inject} from './kupadesk.middleware.js';
 import {recordOutcome, recordCompletion} from './diagnostics.mjs';
+import {snapshotRequest} from './request-check.mjs';
 
 let cached;
 let checked = 0;
@@ -20,11 +21,13 @@ export async function onRequest(body, ctx) {
   let index;
   try {
     try { index = await modelIndex(); } catch { index = cached; }
+    const before = ctx.options?.diagnostics?.checks === false ? null : snapshotRequest(body, ctx.protocol);
     const state = {};
     const result = inject(body, {...ctx, state, modelIndex: index,
       reject() { throw new Error('prompt_binding_invalid'); }});
     const outcome = state.kupadeskOutcome || 'invalid';
-    recordOutcome(outcome, {ctx, index});
+    const after = before ? snapshotRequest(result || body, ctx.protocol, before.shapes) : null;
+    recordOutcome(outcome, {ctx, index, before, after});
     ctx.report?.(outcome === 'unbound' ? 'unbound' : outcome === 'invalid' ? 'invalid'
       : outcome === 'disabled' ? 'skipped' : 'ready');
     return result;

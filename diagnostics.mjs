@@ -1,11 +1,14 @@
 import {createHash} from 'node:crypto';
 import {canonicalModels, selectBinding} from './model-match.js';
 import {readManagedText} from './managed-prompt.js';
+import {snapshotRequest, compareRequests} from './request-check.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const text = (value, max = 256) => typeof value === 'string' && value.length <= max &&
   !/[\u0000-\u001f\u007f]/u.test(value) ? value : '';
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
+const instruction = m => m && (m.type == null || m.type === 'message') &&
+  (m.role === 'system' || m.role === 'developer');
 
 // Inspect instruction containers only. Never record user text, tools, replies,
 // endpoints, accounts, key names, or the instruction itself.
@@ -15,10 +18,10 @@ function instructionCheck(body, protocol, expected) {
   if (protocol === 'responses') {
     fields.push(body.instructions);
     if (Array.isArray(body.input)) for (const m of body.input)
-      if (m?.role === 'system' || m?.role === 'developer') fields.push(m.content);
+      if (instruction(m)) fields.push(m.content);
   } else if (protocol === 'anthropic') fields.push(body.system);
   else if (protocol === 'chat' && Array.isArray(body.messages)) {
-    for (const m of body.messages) if (m?.role === 'system' || m?.role === 'developer') fields.push(m.content);
+    for (const m of body.messages) if (instruction(m)) fields.push(m.content);
   } else if (protocol === 'gemini') fields.push(body.systemInstruction?.parts, body.system_instruction?.parts);
   else return 'unknown';
   let count = 0, matches = 0, inspected = 0;
@@ -51,7 +54,7 @@ export function createDiagnostics({now = Date.now, limit = 30} = {}) {
     if (events.some(other => other !== event && other.response === event.response)) {
       pub.route = {state: 'ambiguous'}; return;
     }
-    const candidates = [...rows.values()].filter(row => row.response === event.response);
+    const candidates = [...rows.values()].filter(row => row.response === event.response && !row.handedOn);
     if (!candidates.length) {
       pub.route = {state: ledger === 'missing' || ledger === 'unavailable' ? ledger :
         now() - event.finished > 30000 ? 'unconfirmed' : 'waiting'};
@@ -68,14 +71,29 @@ export function createDiagnostics({now = Date.now, limit = 30} = {}) {
       pub.route = {state: 'mismatch'}; return;
     }
     pub.route = {state: 'matched', provider: row.provider, model: row.model,
-      status: row.status, source: 'response-id'};
+      served: row.served, status: row.status, source: 'response-id', effort: row.effort};
+    if (!event.routes) { pub.route.attemptState = 'disabled'; return; }
+    const attempts = row.route ? [...rows.values()].filter(candidate => candidate.route === row.route &&
+      candidate.time >= event.started - 60000 && candidate.time <= event.finished + 5000 &&
+      (!candidate.requested || event.models.includes(candidate.requested)) &&
+      (!candidate.agent || !pub.agent || candidate.agent === pub.agent) &&
+      (!candidate.session || !event.session || candidate.session === event.session)).sort((a, b) => a.time - b.time) : [row];
+    const routeConflict = attempts.some(candidate => !candidate.handedOn && candidate.identity !== row.identity);
+    // A terminal response anchors its own route only. Never borrow tries by
+    // model name/time, or turn incomplete/contradictory evidence into success.
+    pub.route.attemptState = routeConflict ? 'ambiguous' : !row.route ? 'final-only' :
+      attempts.length < (row.tries || 1) ? 'partial' : 'recorded';
+    pub.route.total = row.tries || attempts.length;
+    pub.route.attempts = routeConflict ? [] : attempts.slice(0, 20).map(candidate => ({
+      provider: candidate.provider, model: candidate.model, status: candidate.status,
+      handedOn: candidate.handedOn, effort: candidate.effort}));
   }
 
   function record(outcome, details) {
     try {
       if (!Object.hasOwn(totals, outcome)) return;
       totals[outcome]++;
-      const {ctx = {}, index} = details || {};
+      const {ctx = {}, index, before, after} = details || {};
       const model = text(ctx.model);
       let binding, matchState = 'unbound';
       try {
@@ -90,9 +108,12 @@ export function createDiagnostics({now = Date.now, limit = 30} = {}) {
         agent: text(ctx.agent, 80), binding: binding ? {state: 'matched',
           id: text(binding.id), name: text(binding.name, 80),
           models: binding.models.map(x => text(x)).filter(Boolean).slice(0, 12)} : {state: matchState},
-        accepted: 'pending', route: {state: 'pending'}};
+        accepted: 'pending', route: {state: 'pending'},
+        checks: {plugin: ctx.options?.diagnostics?.checks === false ? {state: 'disabled'} : compareRequests(before, after),
+          host: {state: 'pending'}}};
       events.unshift({public: entry, started, models: [...new Set([model, ...canonicalModels(model, index)])],
         expected: typeof binding?.prompt === 'string' ? digest(binding.prompt) : '',
+        after, routes: ctx.options?.diagnostics?.routes !== false,
         session: text(ctx.session, 512) ? digest(ctx.session) : ''});
       if (events.length > limit) events.length = limit;
       if (object(ctx.state)) ctx.state.kupadeskDiagnostic = id;
@@ -108,6 +129,9 @@ export function createDiagnostics({now = Date.now, limit = 30} = {}) {
       event.public.completedAt = iso(event.finished);
       event.public.completion = ctx.success === true ? 'success' : 'failed';
       event.public.accepted = event.expected ? instructionCheck(ctx.request, ctx.protocol, event.expected) : 'not-bound';
+      event.public.checks.host = event.public.checks.plugin.state === 'disabled' ? {state: 'disabled'} :
+        compareRequests(event.after, event.after ? snapshotRequest(ctx.request, ctx.protocol, event.after.shapes) : null);
+      event.after = null;
       const id = text(reply?.id || reply?.responseId, 512);
       event.response = id ? digest(id) : '';
       for (const row of events) match(row);
@@ -121,13 +145,17 @@ export function createDiagnostics({now = Date.now, limit = 30} = {}) {
         if (!object(raw) || raw.computer || raw.source || raw.operation || raw.rejected) continue;
         const id = text(raw.response_id, 512), provider = text(raw.provider), model = text(raw.model);
         const time = Date.parse(raw.t);
-        if (!id || !provider || !model || !Number.isFinite(time) || time < boot - 60000) continue;
+        if (!provider || !model || !Number.isFinite(time) || time < boot - 60000) continue;
         const route = Number.isSafeInteger(raw.route_id) && raw.route_id > 0 ? String(raw.route_id) : '';
-        const row = {response: digest(id), provider, model, time,
+        if (!id && !route) continue;
+        const row = {response: id ? digest(id) : '', route, provider, model, time,
           requested: text(raw.req), agent: text(raw.agent, 80),
           session: text(raw.session, 512) ? digest(raw.session) : '',
-          status: Number.isInteger(raw.status) ? raw.status : 0};
-        row.identity = digest(JSON.stringify([route || row.time, row.provider, row.model, row.requested, row.agent]));
+          status: Number.isInteger(raw.status) ? raw.status : 0,
+          handedOn: raw.handed_on === true, tries: Number.isSafeInteger(raw.tries) && raw.tries > 0 ? raw.tries : 0,
+          served: text(raw.served), effort: text(raw.effort, 40)};
+        row.identity = digest(JSON.stringify([route, row.time, row.provider, row.model, row.requested, row.agent,
+          row.session, row.status, row.handedOn, row.served, row.effort]));
         rows.set(row.response + ':' + row.identity, row);
       }
       for (const [key, row] of rows) if (row.time < now() - 15 * 60000) rows.delete(key);

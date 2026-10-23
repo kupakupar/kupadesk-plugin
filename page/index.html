@@ -16,9 +16,9 @@
     <header class="page-header">
       <div class="brand">
         <img src="kupadesk-native-003-icon.svg?kupaAsset=__KUPADESK_ASSET_NONCE__" width="32" height="32" alt="">
-        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">0.0.15</span></div><p>提示词库 · 按模型应用</p></div>
+        <div><div class="brand-line"><h1>KupaDesk</h1><span class="version">0.0.16</span></div><p>提示词库 · 按模型应用</p></div>
       </div>
-      <div class="header-tools"><span class="connection-label" id="connection-label">正在连接 Magpie</span><button id="refresh-page" class="button button-quiet" type="button" title="重新加载 KupaDesk 页面，无需退出 Magpie">刷新页面</button></div>
+      <div class="header-tools"><span class="connection-label" id="connection-label">正在连接 Magpie</span><button id="open-preferences" class="button button-quiet" type="button" aria-haspopup="dialog" disabled>偏好设置</button><button id="refresh-page" class="button button-quiet" type="button" title="重新加载 KupaDesk 页面，无需退出 Magpie">刷新页面</button></div>
     </header>
     <div id="connection-notice" class="notice" role="status" hidden></div>
     <section class="status-strip" aria-label="注入与同步状态">
@@ -45,11 +45,23 @@
             <div><dt>实际供应商</dt><dd id="diagnostic-provider"></dd></div>
             <div><dt>提示词是否加入</dt><dd id="diagnostic-result"></dd></div>
           </dl>
+          <section class="integrity-section" aria-labelledby="integrity-heading">
+            <div class="section-heading"><h3 id="integrity-heading">请求保真检查</h3><span class="eyebrow">只比较，不改写</span></div>
+            <div class="integrity-table" role="table" aria-label="请求前后对比">
+              <div class="integrity-row integrity-head" role="row"><span role="columnheader">检查内容</span><span role="columnheader">插件前后</span><span role="columnheader">入口处理后</span></div>
+              <div class="integrity-row" role="row"><span role="rowheader">工具声明</span><span id="check-plugin-tools" role="cell"></span><span id="check-host-tools" role="cell"></span></div>
+              <div class="integrity-row" role="row"><span role="rowheader">思考参数</span><span id="check-plugin-thinking" role="cell"></span><span id="check-host-thinking" role="cell"></span></div>
+              <div class="integrity-row" role="row"><span role="rowheader">历史上下文</span><span id="check-plugin-history" role="cell"></span><span id="check-host-history" role="cell"></span></div>
+            </div><p class="field-help">仅忽略本插件有完整标记的提示词块。“入口处理后”核对全部异步 Hook 的结果；不覆盖后续同步中间件、路由、协议转换或供应商内部处理。</p>
+          </section>
+          <details id="route-details" class="route-details"><summary>实际路由 <span id="route-summary"></span></summary><ol id="route-attempts" class="route-attempts"></ol><p id="route-evidence" class="field-help"></p></details>
           <details class="diagnostic-technical"><summary>技术详情</summary><dl class="diagnostic-grid">
             <div><dt>请求模型 ID</dt><dd id="diagnostic-requested-id"></dd></div>
             <div><dt>提示词绑定的模型 ID</dt><dd id="diagnostic-bound-model"></dd></div>
             <div><dt>实际供应商 ID</dt><dd id="diagnostic-provider-id"></dd></div>
             <div><dt>发送给供应商的模型 ID</dt><dd id="diagnostic-served-model"></dd></div>
+            <div><dt>供应商回复的模型 ID</dt><dd id="diagnostic-reported-model"></dd></div>
+            <div><dt>宿主记录的思考级别</dt><dd id="diagnostic-route-effort"></dd></div>
             <div><dt>入口注入结果</dt><dd id="diagnostic-injection"></dd></div>
             <div><dt>宿主请求检查</dt><dd id="diagnostic-accepted"></dd></div>
             <div><dt>回复状态</dt><dd id="diagnostic-completion"></dd></div>
@@ -73,7 +85,7 @@
           <div class="editor-heading"><div class="editor-heading-text"><span class="eyebrow">正在编辑</span><h2 id="editor-title">新提示词</h2></div><div class="editor-actions"><button id="focus-editor" class="button button-quiet" type="button" aria-pressed="false" disabled>专注编辑</button><details class="actions-menu" id="prompt-actions"><summary class="button button-quiet" aria-label="提示词操作">操作</summary><div class="actions-popover"><button id="copy-binding" type="button" disabled>创建副本</button><button id="delete-binding" class="danger-action" type="button">删除提示词</button></div></details></div></div>
           <div class="binding-identity"><div class="field name-field"><label for="binding-name">名称</label><input id="binding-name" type="text" maxlength="80" placeholder="为这份提示词起个名字" autocomplete="off" aria-describedby="name-error"><p id="name-error" class="field-error" hidden></p></div><label class="checkbox-label"><input id="binding-enabled" type="checkbox">启用</label></div>
           <div class="binding-summary"><div class="binding-summary-text"><span class="binding-summary-title" id="bound-model-summary">尚未绑定模型</span><p id="bound-model-names">选择要应用此提示词的模型</p></div><button id="manage-models" class="button button-subtle" type="button" aria-haspopup="dialog" aria-controls="model-drawer" disabled>管理绑定</button></div>
-          <section class="prompt-pane" aria-label="提示词正文"><div class="label-row"><label for="binding-prompt">提示词正文</label><span id="prompt-count" class="character-count">0 / 32768</span></div><textarea id="binding-prompt" rows="16" spellcheck="false" placeholder="写下要应用到所选模型的提示词…" aria-describedby="prompt-error prompt-limit-help"></textarea><p id="prompt-error" class="field-error" hidden></p></section>
+          <details id="prompt-pane" class="prompt-pane" aria-label="提示词正文"><summary class="label-row"><span>提示词正文 <span class="prompt-fold-hint">展开编辑</span></span><span id="prompt-count" class="character-count">0 / 32768</span></summary><label for="binding-prompt" class="sr-only">提示词正文</label><textarea id="binding-prompt" rows="16" spellcheck="false" placeholder="写下要应用到所选模型的提示词…" aria-describedby="prompt-error prompt-limit-help"></textarea><p id="prompt-error" class="field-error" hidden></p></details>
           <div class="editor-bottom"><details class="advanced-options"><summary>进阶设置</summary><div class="advanced-content"><div class="field role-field"><label for="binding-role">Chat 提示词角色</label><select id="binding-role" aria-describedby="role-help"><option value="auto">自动（推荐）</option><option value="system">System · 系统</option><option value="developer">Developer · 开发者</option></select><p id="role-help" class="field-help">自动按请求格式选择角色。手动选择用于兼容不同接口。</p></div><p id="prompt-limit-help" class="field-help">每份最多 32768 字符；超限保留原文并提示。所有提示词合计受 48 KB 设置存储限制。</p></div></details><span class="editor-hint">保存后应用到所选模型</span></div>
         </form>
       </main>
@@ -84,9 +96,19 @@
     <div class="drawer-heading"><div><span class="eyebrow" id="drawer-binding-name">当前提示词</span><h2 id="model-picker-heading">模型绑定 <span id="selected-model-count" class="selection-count">已选 0 个</span></h2></div><button id="close-model-drawer" class="button button-quiet" type="button" aria-label="关闭模型绑定">关闭</button></div>
     <p id="drawer-help" class="field-help">可搜索、多选。选择计入当前草稿，保存设置后生效。</p>
     <div class="model-filters"><label><span class="sr-only">搜索模型名称、ID 或供应商</span><input id="model-search" type="search" placeholder="搜索模型名称、ID 或供应商" autocomplete="off" disabled></label><label><span class="sr-only">按供应商筛选</span><select id="model-provider" disabled><option value="">所有供应商</option></select></label></div>
-    <div class="model-toolbar"><label class="checkbox-label"><input id="models-selected-only" type="checkbox" disabled>只看已选</label><div><button id="select-visible-models" class="text-button" type="button" disabled>选择当前显示</button><button id="clear-selected-models" class="text-button" type="button" disabled>清空已选</button></div></div>
+    <div class="model-toolbar"><label class="checkbox-label"><input id="models-selected-only" type="checkbox" disabled>只看已选</label><label class="checkbox-label"><input id="models-favorites-only" type="checkbox" disabled>只看收藏</label><label class="checkbox-label"><input id="models-show-hidden" type="checkbox" disabled>显示隐藏</label><div><button id="select-visible-models" class="text-button" type="button" disabled>选择当前显示</button><button id="clear-selected-models" class="text-button" type="button" disabled>清空已选</button></div></div>
+    <p id="hidden-model-notice" class="field-help" hidden></p>
     <div class="drawer-scroll"><div id="model-list" class="model-list" role="group" aria-label="可选模型"></div><p id="model-list-empty" class="model-list-empty" hidden>没有匹配的模型</p><p id="model-list-summary" class="field-help" aria-live="polite"></p><div id="extra-selected-models" class="extra-selected-models" hidden><p class="field-help">以下已选模型当前不可用，已有绑定仍会保留：</p><div id="extra-model-list" class="extra-model-list" role="group" aria-label="当前不可用的已选模型"></div><p id="extra-model-summary" class="field-help" hidden></p></div><details id="manual-models" class="manual-models"><summary>手动填写模型 ID</summary><label for="binding-models" class="sr-only">完整模型 ID</label><textarea id="binding-models" rows="3" spellcheck="false" placeholder="provider/model" aria-describedby="models-help models-error"></textarea><p id="models-help" class="field-help">与多选同步。多个模型换行或用逗号分隔，筛选不会清除已有选择。</p><p id="providers-reference" class="field-help" hidden></p></details><p id="models-error" class="field-error" hidden></p></div>
     <div class="drawer-footer"><span class="field-help">关闭抽屉会保留当前选择</span><button id="done-model-drawer" class="button button-primary" type="button">完成选择</button></div>
+  </dialog>
+  <dialog id="preferences-dialog" class="preferences-dialog" aria-labelledby="preferences-heading">
+    <div class="drawer-heading"><div><span class="eyebrow">KupaDesk</span><h2 id="preferences-heading">偏好设置</h2></div><button id="close-preferences" class="button button-quiet" type="button">关闭</button></div>
+    <p class="field-help">调整计入当前草稿，点击主页面「保存设置」后生效。沿用现有加密同步。</p>
+    <div class="preferences-scroll">
+      <section class="preference-section"><h3>编辑与列表</h3><label class="preference-row"><span><strong>默认收起提示词正文</strong><small>首次打开提示词时先看摘要，需要时展开编辑。</small></span><input id="pref-collapse-prompt" type="checkbox"></label><label class="preference-row"><span><strong>紧凑模型列表</strong><small>减少行高，完整模型 ID 仍然保留。</small></span><input id="pref-compact-models" type="checkbox"></label><div class="preference-row"><span><strong>模型收藏</strong><small id="favorite-count">在绑定列表点星标即可置顶；不会自动选中或绑定。</small></span><button id="clear-favorites" class="button button-quiet" type="button">清空收藏</button></div></section>
+      <section class="preference-section"><div class="section-heading"><h3>隐藏供应商</h3><button id="show-all-providers" class="text-button" type="button">全部显示</button></div><p class="field-help">勾选后，其模型默认不出现在绑定列表中。已有绑定继续生效；可在绑定抽屉勾选「显示隐藏」临时查看。</p><input id="provider-visibility-search" type="search" aria-label="搜索要隐藏的供应商" placeholder="搜索供应商名称或 ID"><div id="provider-visibility-list" class="provider-visibility-list"></div><p id="provider-visibility-empty" class="field-help" hidden>没有匹配的供应商。</p></section>
+      <section class="preference-section"><h3>诊断</h3><label class="preference-row"><span><strong>请求保真检查</strong><small>比较工具声明、思考参数和历史上下文，仅保留检查结果与数量。</small></span><input id="pref-integrity" type="checkbox"></label><label class="preference-row"><span><strong>展开路由尝试记录</strong><small>按回复 ID 和路由编号核对；最终供应商诊断始终保留。</small></span><input id="pref-route-attempts" type="checkbox"></label></section>
+    </div><div class="drawer-footer"><span class="field-help">关闭后保留偏好草稿</span><button id="done-preferences" class="button button-primary" type="button">完成</button></div>
   </dialog>
 </body>
 </html>

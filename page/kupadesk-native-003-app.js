@@ -12,9 +12,71 @@
   const $ = id => document.getElementById(id);
   const clone = value => JSON.parse(JSON.stringify(value));
   const state = { options: null, saved: null, selected: null, deleted: [], connected: false, saving: false, lastSave: 0, cooldown: null, catalog: [], catalogById: new Map(), catalogProviders: new Map(), visibleModels: [], catalogSignature: '', catalogStatus: 'waiting', catalogLastSuccess: '', catalogCheckedAt: '', catalogReloadFailed: false, catalogLoading: false, catalogTimer: null, catalogRequestTimer: null, catalogScript: null, disposed: false };
-  const controls = ['injection-enabled', 'add-binding', 'empty-add-binding', 'binding-search', 'copy-binding', 'manage-models', 'focus-editor'];
+  const controls = ['injection-enabled', 'add-binding', 'empty-add-binding', 'binding-search', 'copy-binding', 'manage-models', 'focus-editor', 'open-preferences'];
   const fieldIds = ['binding-name', 'binding-models', 'binding-prompt', 'binding-role', 'binding-enabled'];
-  const pickerControls = ['model-search', 'model-provider', 'models-selected-only', 'select-visible-models', 'clear-selected-models'];
+  const pickerControls = ['model-search', 'model-provider', 'models-selected-only', 'models-favorites-only', 'models-show-hidden', 'select-visible-models', 'clear-selected-models'];
+  const promptVisibility = new Map();
+  let preferencesOpener = null;
+
+  function preferences() {
+    const raw = state.options?.view || {};
+    return {hiddenProviders: Array.isArray(raw.hiddenProviders) ? raw.hiddenProviders.filter(x => typeof x === 'string') : [],
+      favoriteModels: Array.isArray(raw.favoriteModels) ? raw.favoriteModels.filter(x => typeof x === 'string') : [],
+      collapsePrompt: raw.collapsePrompt !== false, compactModels: raw.compactModels === true};
+  }
+
+  function setPreference(key, value) {
+    if (!state.connected || state.saving) return;
+    state.options.view = {...state.options.view, [key]: value};
+    replaceProviderOptions(state.catalogProviders);
+    drawModelPicker();
+    updateSaveState();
+  }
+
+  function drawPreferences() {
+    const prefs = preferences();
+    $('pref-collapse-prompt').checked = prefs.collapsePrompt;
+    $('pref-compact-models').checked = prefs.compactModels;
+    $('pref-integrity').checked = state.options?.diagnostics?.checks !== false;
+    $('pref-route-attempts').checked = state.options?.diagnostics?.routes !== false;
+    $('favorite-count').textContent = '已收藏 ' + prefs.favoriteModels.length + ' 个模型；在绑定列表点星标置顶，不会自动绑定。';
+    $('clear-favorites').disabled = state.saving || !prefs.favoriteModels.length;
+    const hidden = new Set(prefs.hiddenProviders), providers = new Map(state.catalogProviders);
+    for (const id of hidden) if (!providers.has(id)) providers.set(id, id + '（当前不在目录中）');
+    const term = $('provider-visibility-search').value.trim().toLowerCase();
+    const list = $('provider-visibility-list'); list.replaceChildren();
+    for (const [id, name] of [...providers].sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'))) {
+      if (!(name + '\n' + id).toLowerCase().includes(term)) continue;
+      const label = document.createElement('label'); label.className = 'preference-row provider-visibility-row';
+      const content = document.createElement('span'), title = document.createElement('strong'), sub = document.createElement('small');
+      title.textContent = name; sub.textContent = id; content.append(title, sub);
+      const input = document.createElement('input'); input.type = 'checkbox'; input.checked = hidden.has(id);
+      input.dataset.hideProvider = id; input.setAttribute('aria-label', '隐藏 ' + name);
+      input.disabled = state.saving;
+      input.addEventListener('change', safely(() => {
+        const next = new Set(preferences().hiddenProviders);
+        input.checked ? next.add(id) : next.delete(id);
+        setPreference('hiddenProviders', [...next]);
+      }));
+      label.append(content, input); list.append(label);
+    }
+    $('provider-visibility-empty').hidden = list.children.length > 0;
+  }
+
+  function openPreferences() {
+    if (!state.connected || state.saving || $('preferences-dialog').open) return;
+    preferencesOpener = document.activeElement;
+    drawPreferences(); $('preferences-dialog').showModal();
+    $('preferences-dialog').querySelector('.preferences-scroll').scrollTop = 0;
+    $('close-preferences').focus();
+  }
+
+  function closePreferences() {
+    if (!$('preferences-dialog').open) return;
+    $('preferences-dialog').close();
+    if (preferencesOpener?.isConnected) preferencesOpener.focus();
+    preferencesOpener = null;
+  }
   let diagnosticRows = [], selectedDiagnostic = '', diagnosticOptionSignature = '';
   let refreshing = false, refreshTimer = null;
 
@@ -87,10 +149,33 @@
     $('diagnostic-provider').textContent = route.state === 'matched' ? providerName || '供应商名称暂不可用（可展开技术详情）' : routes[route.state] || '未知';
     $('diagnostic-provider-id').textContent = route.state === 'matched' ? route.provider || '未提供供应商 ID' : '—';
     $('diagnostic-served-model').textContent = route.state === 'matched' ? route.model || '模型 ID 未提供' : '—';
+    $('diagnostic-reported-model').textContent = route.state === 'matched' ? route.served || '供应商未报告' : '—';
+    $('diagnostic-route-effort').textContent = route.state === 'matched' ? route.effort || '宿主未记录' : '—';
     $('diagnostic-injection').textContent = outcomes[row.outcome] || '结果未知';
     $('diagnostic-accepted').textContent = accepted[row.accepted] || '未核对';
     $('diagnostic-completion').textContent = row.completion === 'success' ? '回复完成' :
       row.completion === 'failed' ? '回复失败或不完整' : '尚未收到完成回调';
+    for (const phase of ['plugin', 'host']) for (const category of ['tools', 'thinking', 'history']) {
+      const check = row.checks?.[phase], item = check?.[category], code = check?.state || item?.state || 'unknown';
+      const target = $('check-' + phase + '-' + category);
+      target.textContent = ({same: '保持一致', changed: '发现变化', unknown: '无法确认', pending: '等待回调', disabled: '已关闭'})[code] || '无法确认';
+      if (item && Number.isInteger(item.before) && Number.isInteger(item.after)) target.textContent += ' · ' + item.before + ' → ' + item.after;
+      target.dataset.state = code;
+    }
+    const attempts = Array.isArray(route.attempts) ? route.attempts : [];
+    $('route-summary').textContent = route.state === 'matched' ? '已核对最终供应商' + (route.total > 1 ? ' · ' + route.total + ' 次尝试' : '') : '等待可靠记录';
+    $('route-attempts').replaceChildren();
+    for (const attempt of attempts) {
+      const li = document.createElement('li');
+      li.textContent = (state.catalogProviders.get(attempt.provider) || attempt.provider || '未知供应商') + ' · ' +
+        (attempt.model || '未知模型') + ' · HTTP ' + (attempt.status || '未知') +
+        (attempt.handedOn ? ' · 已转交下一路由' : ' · 最终记录') + (attempt.effort ? ' · 思考 ' + attempt.effort : '');
+      $('route-attempts').append(li);
+    }
+    $('route-evidence').textContent = ({recorded: '回复 ID 定位最终记录，再按同一路由编号核对。记录最多展示 20 项。',
+      partial: '已确认最终供应商，但本机尝试记录不完整；不补猜缺失步骤。',
+      ambiguous: '同一路由出现冲突记录，尝试列表暂不归属。', disabled: '尝试记录展示已关闭。',
+      'final-only': '此记录没有路由编号，只能确认最终供应商。'})[route.attemptState] || '缺少可靠记录时不根据模型名称或时间猜测路由。';
     $('diagnostic-evidence').textContent = route.state === 'matched' ?
       '已按回复 ID 对应同一次请求的本机用量记录' + (route.status ? ' · HTTP ' + route.status : '') :
       '供应商只在回复 ID 唯一对应时显示；不根据模型名称猜测。';
@@ -187,6 +272,7 @@
     all.textContent = '所有供应商';
     select.replaceChildren(all);
     for (const [id, name] of [...providers.entries()].sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'))) {
+      if (!$('models-show-hidden').checked && preferences().hiddenProviders.includes(id)) continue;
       const option = document.createElement('option');
       option.value = id;
       option.textContent = name === id ? name : name + ' · ' + id;
@@ -198,7 +284,7 @@
       previous.textContent = previousName + '（当前不可用）';
       select.append(previous);
     }
-    select.value = previousId;
+    select.value = [...select.options].some(x => x.value === previousId) ? previousId : '';
   }
 
   function loadCatalog() {
@@ -250,6 +336,7 @@
       state.catalogById = catalogById;
       state.catalogProviders = providers;
       state.catalogSignature = signature;
+      if ($('preferences-dialog').open) drawPreferences();
       // Repaint only the directory. Options, text inputs and their drafts stay intact.
       if (currentBinding()) drawModelPicker();
     }
@@ -341,6 +428,7 @@
   }
 
   function modelRow(model, selected, occupied) {
+    const wrapper = document.createElement('div'); wrapper.className = 'model-option-wrap';
     const row = document.createElement('label');
     row.className = 'model-option';
     const checkbox = document.createElement('input');
@@ -379,7 +467,17 @@
         (replacement || $('model-search')).focus();
       }
     }));
-    return row;
+    const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = 'favorite-model';
+    const isFavorite = preferences().favoriteModels.includes(model.id);
+    favorite.dataset.favoriteId = model.id; favorite.textContent = isFavorite ? '★' : '☆';
+    favorite.setAttribute('aria-label', (isFavorite ? '取消收藏 ' : '收藏 ') + model.name);
+    favorite.setAttribute('aria-pressed', String(isFavorite)); favorite.disabled = state.saving || !state.connected;
+    favorite.addEventListener('click', safely(() => {
+      const next = new Set(preferences().favoriteModels); next.has(model.id) ? next.delete(model.id) : next.add(model.id);
+      setPreference('favoriteModels', [...next]);
+      [...$('model-list').querySelectorAll('[data-favorite-id]')].find(x => x.dataset.favoriteId === model.id)?.focus();
+    }));
+    wrapper.append(row, favorite); return wrapper;
   }
 
   function drawModelPicker() {
@@ -389,9 +487,15 @@
     const terms = $('model-search').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const provider = $('model-provider').value;
     const selectedOnly = $('models-selected-only').checked;
-    const filtered = state.catalog.filter(model => (!provider || model.provider === provider) && (!selectedOnly || selected.has(model.id)) && terms.every(term => model.search.includes(term)));
+    const prefs = preferences(), hidden = new Set(prefs.hiddenProviders), favorites = new Set(prefs.favoriteModels);
+    const showHidden = $('models-show-hidden').checked, favoritesOnly = $('models-favorites-only').checked;
+    const filtered = state.catalog.filter(model => (showHidden || !hidden.has(model.provider)) &&
+      (!provider || model.provider === provider) && (!selectedOnly || selected.has(model.id)) &&
+      (!favoritesOnly || favorites.has(model.id)) && terms.every(term => model.search.includes(term)))
+      .sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)));
     state.visibleModels = filtered.slice(0, MODEL_RENDER_LIMIT);
     const list = $('model-list');
+    list.dataset.compact = String(prefs.compactModels);
     list.replaceChildren();
     for (const model of state.visibleModels) list.append(modelRow(model, selected, occupied));
     $('selected-model-count').textContent = '已选 ' + selected.size + ' 个';
@@ -402,7 +506,10 @@
     $('select-visible-models').textContent = '选择当前显示' + (available ? '（' + available + '）' : '');
     $('select-visible-models').disabled = !binding || !available || state.saving || !state.connected;
     $('clear-selected-models').disabled = !binding || !selected.size || state.saving || !state.connected;
-    for (const id of ['model-search', 'models-selected-only']) $(id).disabled = !binding || state.saving || !state.connected || !state.catalog.length;
+    for (const id of ['model-search', 'models-selected-only', 'models-favorites-only', 'models-show-hidden']) $(id).disabled = !binding || state.saving || !state.connected || !state.catalog.length;
+    const hiddenSelected = [...selected].filter(id => hidden.has(state.catalogById.get(id)?.provider)).length;
+    $('hidden-model-notice').hidden = !hidden.size;
+    $('hidden-model-notice').textContent = '已隐藏 ' + hidden.size + ' 个供应商' + (hiddenSelected ? '，其中有 ' + hiddenSelected + ' 个已绑定模型继续生效' : '') + '。勾选「显示隐藏」可临时查看。';
     $('model-provider').disabled = !binding || state.saving || !state.connected || !state.catalogProviders.size;
     const extraIds = [...selected].filter(id => !state.catalogById.has(id));
     $('extra-selected-models').hidden = extraIds.length === 0;
@@ -454,7 +561,7 @@
     $('focus-editor').textContent = enabled ? '退出专注' : '专注编辑';
     $('prompt-actions').open = false;
     $('status-details').open = false;
-    if (enabled) $('binding-prompt').focus();
+    if (enabled) { $('prompt-pane').open = true; $('binding-prompt').focus(); }
   }
 
   function updateSaveState(label) {
@@ -483,7 +590,7 @@
 
   function fieldError(name, message) {
     if (name === 'models') { openModelDrawer(); $('manual-models').open = true; }
-    if (name === 'prompt') $('prompt-count').dataset.overLimit = String(currentBinding()?.prompt.length > PROMPT_LIMIT);
+    if (name === 'prompt') { $('prompt-pane').open = true; $('prompt-count').dataset.overLimit = String(currentBinding()?.prompt.length > PROMPT_LIMIT); }
     $('binding-' + name).setAttribute('aria-invalid', 'true');
     $(name + '-error').textContent = message;
     $(name + '-error').hidden = false;
@@ -538,6 +645,8 @@
     $('binding-name').value = binding.name;
     $('binding-models').value = binding.models.join('\n');
     $('binding-prompt').value = binding.prompt;
+    $('prompt-pane').open = promptVisibility.has(binding.id) ? promptVisibility.get(binding.id) :
+      (!preferences().collapsePrompt || !binding.prompt);
     $('binding-role').value = binding.chatRole;
     $('binding-enabled').checked = binding.enabled;
     $('editor-title').textContent = binding.name.trim() || '新提示词';
@@ -548,8 +657,10 @@
 
   function drawAll() {
     $('injection-enabled').checked = Boolean(state.options?.enabled);
+    replaceProviderOptions(state.catalogProviders);
     drawList();
     drawEditor();
+    if ($('preferences-dialog').open) drawPreferences();
     updateSaveState();
   }
 
@@ -640,6 +751,7 @@
     $('refresh-page').disabled = saving || refreshing;
     for (const id of controls.concat(fieldIds, pickerControls, ['delete-binding'])) $(id).disabled = saving || !state.connected;
     for (const button of $('binding-list').querySelectorAll('button')) button.disabled = saving;
+    for (const input of $('preferences-dialog').querySelectorAll('input, button:not(#close-preferences):not(#done-preferences)')) input.disabled = saving || !state.connected;
     if (currentBinding()) drawModelPicker();
     updateSaveState(saving ? '正在保存到本地…' : undefined);
   }
@@ -775,6 +887,31 @@
   }
 
   $('add-binding').addEventListener('click', safely(addBinding));
+  $('open-preferences').addEventListener('click', safely(openPreferences));
+  $('close-preferences').addEventListener('click', safely(closePreferences));
+  $('done-preferences').addEventListener('click', safely(closePreferences));
+  $('preferences-dialog').addEventListener('cancel', safely(event => {event.preventDefault(); closePreferences();}));
+  $('preferences-dialog').addEventListener('click', safely(event => {
+    if (event.target !== $('preferences-dialog')) return;
+    const rect = event.target.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closePreferences();
+  }));
+  $('provider-visibility-search').addEventListener('input', safely(drawPreferences));
+  $('pref-collapse-prompt').addEventListener('change', safely(() => {
+    const collapsed = $('pref-collapse-prompt').checked;
+    setPreference('collapsePrompt', collapsed); promptVisibility.clear(); drawEditor();
+  }));
+  $('pref-compact-models').addEventListener('change', safely(() => setPreference('compactModels', $('pref-compact-models').checked)));
+  $('show-all-providers').addEventListener('click', safely(() => {setPreference('hiddenProviders', []); drawPreferences();}));
+  $('clear-favorites').addEventListener('click', safely(() => {setPreference('favoriteModels', []); drawPreferences();}));
+  for (const [id, key] of [['pref-integrity', 'checks'], ['pref-route-attempts', 'routes']])
+    $(id).addEventListener('change', safely(() => {
+      if (state.saving || !state.connected) return;
+      state.options.diagnostics = {...state.options.diagnostics, [key]: $(id).checked}; updateSaveState();
+    }));
+  $('prompt-pane').addEventListener('toggle', () => {
+    if (state.selected) promptVisibility.set(state.selected, $('prompt-pane').open);
+  });
   $('refresh-page').addEventListener('click', safely(refreshPage));
   $('empty-add-binding').addEventListener('click', safely(addBinding));
   $('copy-binding').addEventListener('click', safely(copyBinding));
@@ -803,6 +940,8 @@
     drawModelPicker();
   }));
   $('models-selected-only').addEventListener('change', safely(drawModelPicker));
+  $('models-favorites-only').addEventListener('change', safely(drawModelPicker));
+  $('models-show-hidden').addEventListener('change', safely(() => {replaceProviderOptions(state.catalogProviders); drawModelPicker();}));
   $('select-visible-models').addEventListener('click', safely(() => {
     const binding = currentBinding();
     if (!binding || state.saving) return;
@@ -850,6 +989,11 @@
     drawAll();
   }));
   document.addEventListener('keydown', safely(event => {
+    if ($('preferences-dialog').open) {
+      if (event.key === 'Escape') {event.preventDefault(); closePreferences();}
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {event.preventDefault(); closePreferences(); void saveOptions();}
+      return;
+    }
     if ($('model-drawer').open) {
       if (event.key === 'Escape') {
         event.preventDefault();

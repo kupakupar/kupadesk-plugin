@@ -235,3 +235,53 @@ kbd { font: 9px/1.4 var(--code); opacity: .8; border: 1px solid color-mix(in srg
   #binding-form { min-height: 410px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before { transition: none !important; scroll-behavior: auto !important; } }
+
+/* 016: settings and evidence stay secondary to the prompt library. */
+.preferences-dialog { width: min(580px, calc(100% - 28px)); max-height: min(820px, calc(100dvh - 32px)); padding: 22px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 80px #0004; }
+.preferences-dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+.preferences-dialog::backdrop { background: #0006; }
+.preferences-scroll { overflow: auto; min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 4px; }
+.preference-section { border-top: 1px solid var(--border); padding: 16px 0; }
+.preference-section h3 { font-size: 13px; margin: 0 0 8px; }
+.preference-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 11px 0; }
+.preference-row > span { min-width: 0; }
+.preference-row strong { display: block; font-size: 12px; font-weight: 550; }
+.preference-row small { display: block; color: var(--secondary); font-size: 11px; line-height: 1.6; margin-top: 3px; overflow-wrap: anywhere; }
+.preference-row > input { flex: 0 0 auto; }
+.preference-row button { flex-shrink: 0; }
+.provider-visibility-list { max-height: 220px; overflow: auto; margin-top: 8px; padding-right: 7px; }
+.provider-visibility-row { border-bottom: 1px solid var(--border); padding: 9px 1px; }
+.provider-visibility-row:last-child { border: 0; }
+.model-option-wrap { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.model-option-wrap:last-child { border-bottom: 0; }
+.model-option-wrap > .model-option { flex: 1; min-width: 0; border: 0; }
+.favorite-model { flex: 0 0 38px; align-self: stretch; min-height: 40px; border: 0; background: transparent; color: var(--secondary); font-size: 22px; }
+.favorite-model[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.favorite-model:hover { background: var(--hover); }
+.model-list[data-compact="true"] .model-option { min-height: 50px; padding-top: 7px; padding-bottom: 7px; }
+#hidden-model-notice { margin: 0 0 12px; color: var(--secondary); }
+#prompt-pane { flex: 0 0 auto; min-height: 0; }
+#prompt-pane > summary { padding: 12px 0; cursor: pointer; list-style: none; border-top: 1px solid var(--border); }
+#prompt-pane > summary::before { content: '›'; font-size: 20px; line-height: 1; color: var(--secondary); margin-right: 7px; }
+#prompt-pane > summary > span:first-of-type { flex: 1; }
+#prompt-pane[open] > summary::before { content: '⌄'; }
+#prompt-pane[open] { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 180px; }
+#prompt-pane:not([open]) > :not(summary) { display: none; }
+.prompt-fold-hint { margin-left: 8px; color: var(--secondary); font-size: 11px; font-weight: 400; }
+#prompt-pane[open] .prompt-fold-hint { display: none; }
+.integrity-section { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 14px; }
+.integrity-section h3 { margin: 0; font-size: 12px; }
+.integrity-table { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; margin: 10px 0; }
+.integrity-row { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--border); }
+.integrity-row:first-child { border-top: 0; }
+.integrity-row > span { padding: 8px 10px; font-size: 11px; overflow-wrap: anywhere; }
+.integrity-head { color: var(--secondary); background: var(--control); }
+.integrity-row [data-state="same"] { color: var(--success); }
+.integrity-row [data-state="changed"] { color: var(--danger); font-weight: 600; }
+.integrity-row [data-state="unknown"], .integrity-row [data-state="pending"] { color: var(--secondary); }
+.route-details { margin: 12px 0; padding: 10px 0; border-top: 1px solid var(--border); }
+.route-details > summary { font-size: 12px; }
+#route-summary { font-size: 11px; color: var(--secondary); margin-left: 8px; }
+.route-attempts { padding-left: 24px; margin: 12px 0; font-size: 11px; }
+.route-attempts li { margin: 7px 0; overflow-wrap: anywhere; }
+@media (max-width: 540px) { .preferences-dialog { padding: 16px; } .header-tools { gap: 5px; flex-wrap: wrap; justify-content: flex-end; } .connection-label { width: 100%; text-align: right; } .integrity-row > span { padding: 8px 5px; } }

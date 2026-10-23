@@ -28,6 +28,19 @@ test('initial empty destination imports all prompts; empty cloud does not erase 
  expect(mergeSettings({},a).options).toEqual(a);
  expect(mergeSettings(a,{}).options).toEqual(a);
 });
+
+test('016 optional view and diagnostic preferences use the existing merge without changing prompts or model bindings',()=>{
+ const base=options([binding('a','PRIVATE_FULL_TEXT','provider/model')]);
+ const local={...structuredClone(base),view:{hiddenProviders:['hidden'],favoriteModels:['provider/model'],collapsePrompt:true}};
+ const remote={...structuredClone(base),diagnostics:{checks:false,routes:false}};
+ const merged=mergeSettings(local,remote,base);
+ expect(merged.options.bindings).toEqual(base.bindings);
+ expect(merged.options.view).toEqual(local.view);
+ expect(merged.options.diagnostics).toEqual(remote.diagnostics);
+ expect(merged.conflicts).toEqual([]);
+ const imported=mergeSettings({},merged.options).options;
+ expect(imported).toEqual(merged.options);
+});
 test('different edits merge, and concurrent same-prompt edits retain an inactive unbound copy',()=>{
  const base=options([binding('a','first'),binding('b','second')]);
  const local=structuredClone(base),remote=structuredClone(base);
