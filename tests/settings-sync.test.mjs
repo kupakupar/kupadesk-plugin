@@ -87,3 +87,27 @@ test('official git installation and legacy tarball identify the same plugin only
  expect(portableKupa('github:other/kupadesk-plugin')).toBe(false);
  expect(portableKupa('github:kupakupar/kupadesk-plugin-other')).toBe(false);
 });
+
+test('oversized cloud settings retain local prompts, bindings and the last merge base',async()=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'kupa-sync-budget-'));
+ const c={url:'https://example.invalid/dav',user:'fixture',passphrase:'fixture-pass'};
+ const local=options([binding('a','LOCAL_FULL_TEXT','one/model')]);
+ const original={plugins:[{spec:'github:kupakupar/kupadesk-plugin',options:local}]};
+ const stateDir=path.join(dir,'kupadesk-private-sync');
+ const key=sha(c.url+'\0'+c.user+'\0'+c.passphrase);
+ try {
+  await fs.mkdir(stateDir,{recursive:true});
+  await write(path.join(dir,'sync.json'),c);
+  await write(path.join(dir,'plugins.json'),original);
+  const previous={scope:key,base:local};
+  await write(path.join(stateDir,'state.json'),previous);
+  const remote=options([binding('a','中'.repeat(30000),'one/model')]);
+  const raw=seal({plugins:[{spec:'github:kupakupar/kupadesk-plugin',options:remote}]});
+  await fs.writeFile(path.join(dir,'sync-server.magpie-backup'),raw);
+  await write(path.join(dir,'sync-state.json'),{key,sum:sha(raw)});
+  await new SettingsSync({directory:dir}).tick();
+  expect(await read(path.join(dir,'plugins.json'))).toEqual(original);
+  expect(await read(path.join(stateDir,'state.json'))).toEqual(previous);
+  expect((await read(path.join(stateDir,'status.json'))).code).toBe('settings_merge_too_large');
+ } finally {await fs.rm(dir,{recursive:true,force:true});}
+});

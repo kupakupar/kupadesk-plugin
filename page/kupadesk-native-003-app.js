@@ -5,8 +5,8 @@
   // supplied by this script's URL. Keep it local and out of logs/settings.
   const assetNonce = new URL(document.currentScript?.src || location.href).searchParams.get('kupaAsset');
 
-  const LIMIT_BYTES = 48 * 1024;
-  const PROMPT_LIMIT = 32768;
+  const SAVE_LIMIT_BYTES = 64 * 1024;
+  const SAVE_SPEC = 'github:kupakupar/kupadesk-plugin';
   const MODEL_RENDER_LIMIT = 200;
   const ROLES = new Set(['auto', 'system', 'developer']);
   const $ = id => document.getElementById(id);
@@ -202,7 +202,8 @@
   }
 
   function sizeOf(value) {
-    return new TextEncoder().encode(JSON.stringify(value)).length;
+    // Count the complete official page-options request, not just prompt text.
+    return new TextEncoder().encode(JSON.stringify({spec: SAVE_SPEC, options: value})).length;
   }
 
   function newId() {
@@ -567,8 +568,9 @@
   function updateSaveState(label) {
     const dirty = isDirty();
     const bytes = state.options ? sizeOf(state.options) : 0;
-    $('storage-meter').textContent = (bytes / 1024).toFixed(1) + ' / 48 KB';
-    $('storage-meter').style.color = bytes > LIMIT_BYTES ? 'var(--danger)' : '';
+    $('storage-meter').textContent = (bytes / 1024).toFixed(1) + ' / 64 KB';
+    $('storage-meter').title = '包含全部提示词、模型绑定、偏好设置和保存所需数据，按 UTF-8 字节计算。';
+    $('storage-meter').style.color = bytes > SAVE_LIMIT_BYTES ? 'var(--danger)' : '';
     $('save-status').dataset.dirty = String(dirty);
     $('save-status').dataset.saved = String(state.connected && !dirty);
     $('save-status').textContent = label || (dirty ? '有未保存的修改' : (state.connected ? '设置已保存' : '尚未连接 Magpie'));
@@ -590,7 +592,7 @@
 
   function fieldError(name, message) {
     if (name === 'models') { openModelDrawer(); $('manual-models').open = true; }
-    if (name === 'prompt') { $('prompt-pane').open = true; $('prompt-count').dataset.overLimit = String(currentBinding()?.prompt.length > PROMPT_LIMIT); }
+    if (name === 'prompt') $('prompt-pane').open = true;
     $('binding-' + name).setAttribute('aria-invalid', 'true');
     $(name + '-error').textContent = message;
     $(name + '-error').hidden = false;
@@ -650,8 +652,7 @@
     $('binding-role').value = binding.chatRole;
     $('binding-enabled').checked = binding.enabled;
     $('editor-title').textContent = binding.name.trim() || '新提示词';
-    $('prompt-count').textContent = binding.prompt.length + ' / ' + PROMPT_LIMIT;
-    $('prompt-count').dataset.overLimit = String(binding.prompt.length > PROMPT_LIMIT);
+    $('prompt-count').textContent = binding.prompt.length.toLocaleString() + ' 字符';
     drawModelPicker();
   }
 
@@ -673,8 +674,7 @@
     binding.chatRole = ROLES.has($('binding-role').value) ? $('binding-role').value : 'auto';
     binding.enabled = $('binding-enabled').checked;
     $('editor-title').textContent = binding.name.trim() || '新提示词';
-    $('prompt-count').textContent = binding.prompt.length + ' / ' + PROMPT_LIMIT;
-    $('prompt-count').dataset.overLimit = String(binding.prompt.length > PROMPT_LIMIT);
+    $('prompt-count').textContent = binding.prompt.length.toLocaleString() + ' 字符';
     drawBindingSummary();
     clearValidation();
     showError('');
@@ -726,7 +726,6 @@
         seen.set(model, binding.id);
       }
       if (!binding.prompt.trim()) errors.prompt = '请填写提示词正文。';
-      else if (binding.prompt.length > PROMPT_LIMIT) errors.prompt = '每份提示词最多 ' + PROMPT_LIMIT + ' 个字符。';
       else if (binding.prompt.includes('<!-- KUPADESK-NATIVE-PAGE-TEST:BEGIN -->') || binding.prompt.includes('<!-- KUPADESK-NATIVE-PAGE-TEST:END -->')) errors.prompt = '提示词不能包含此插件的内部管理标记。';
       if (Object.keys(errors).length) {
         state.selected = binding.id;
@@ -739,8 +738,9 @@
         return false;
       }
     }
-    if (sizeOf(state.options) > LIMIT_BYTES) {
-      showError('本地设置超过 48 KB，请缩短提示词或减少保存的内容。');
+    const excess = sizeOf(state.options) - SAVE_LIMIT_BYTES;
+    if (excess > 0) {
+      showError('设置及保存所需数据超过 64 KB（超出 ' + excess.toLocaleString() + ' 字节），完整草稿已保留。请减少提示词正文或数量后再保存；不会截断内容。');
       return false;
     }
     return true;
@@ -776,7 +776,9 @@
       if (!currentBinding()) state.selected = state.options.bindings[0]?.id || null;
       drawAll();
     } catch (error) {
-      const reason = String(error?.message || '未知错误');
+      const reason = /http: request body too large/i.test(String(error?.message))
+        ? '当前安装入口的保存请求超过 Magpie 的 64 KB 上限，完整草稿已保留，请减少内容后重试。'
+        : String(error?.message || '未知错误');
       showError('保存失败，修改仍保留在页面中。' + (reason.length < 180 ? ' ' + reason : ' 请稍后重试。'));
     } finally {
       setSaving(false);

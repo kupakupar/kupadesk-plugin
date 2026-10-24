@@ -1,6 +1,6 @@
 const START = '<!-- KUPADESK-NATIVE-PAGE-TEST:BEGIN -->';
 const END = '<!-- KUPADESK-NATIVE-PAGE-TEST:END -->';
-const FOOTER = /\n<!-- KUPADESK:MANAGED:1:(text|message|part):(\d{1,10}):([a-f0-9]{16}):(\d{1,5}):([a-f0-9]{16}) -->$/;
+const FOOTER = /\n<!-- KUPADESK:MANAGED:1:(text|message|part):(\d{1,10}):([a-f0-9]{16}):(\d{1,10}):([a-f0-9]{16}) -->$/;
 
 // Format integrity, not authentication. Bind the suffix to its exact prefix and
 // prompt, so copied examples, partial markers and unknown legacy blocks stay data.
@@ -20,7 +20,8 @@ export function readManagedText(text) {
   if (!footer) return null;
   const [, kind, prefixSize, prefixHash, promptSize, promptHash] = footer;
   const prefixLength = Number(prefixSize), promptLength = Number(promptSize);
-  if (promptLength < 1 || promptLength > 32768 || prefixLength > text.length ||
+  if (!Number.isSafeInteger(promptLength) || promptLength < 1 ||
+      !Number.isSafeInteger(prefixLength) || prefixLength > text.length ||
       (kind !== 'text' && prefixLength !== 0)) return null;
   const at = prefixLength + (prefixLength ? 2 : 0);
   const promptAt = at + START.length + 1;

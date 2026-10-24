@@ -24,16 +24,21 @@ const { JSDOM } = require(process.argv[2] || 'jsdom');
   try {
     await wait(30);
     assert.equal(field.maxLength, -1, 'pasted text must not be truncated');
-    for (const text of ['字'.repeat(16001), 'x'.repeat(32768)]) {
+    const texts = ['字'.repeat(19300), 'x'.repeat(32769)];
+    for (const text of texts) {
       edit(text); button.click(); await wait(30);
       assert.equal(saved.bindings[0].prompt, text);
+      assert.equal(field.value, text);
+      assert.doesNotMatch(win.document.getElementById('storage-meter').textContent, /\/\s*48/);
+      assert.doesNotMatch(win.document.getElementById('prompt-count').textContent, /\/\s*32768/);
       await wait(1150);
     }
     const before = saves;
-    edit('x'.repeat(32769)); button.click(); await wait(30);
-    assert.equal(field.value.length, 32769);
+    const oversized = '中文😀\n'.repeat(30001);
+    edit(oversized); button.click(); await wait(30);
+    assert.equal(field.value === oversized, true);
     assert.equal(saves, before);
-    assert.match(win.document.getElementById('prompt-error').textContent, /32768/);
+    assert.match(win.document.getElementById('save-error').textContent, /64 KB/);
     win.setTheme({dark: false}); assert.equal(win.document.documentElement.dataset.theme, 'light');
     win.setTheme({dark: true}); assert.equal(win.document.documentElement.dataset.theme, 'dark');
     assert.match(win.document.getElementById('injection-info').textContent, /已生成提示词注入/);
@@ -44,6 +49,6 @@ const { JSDOM } = require(process.argv[2] || 'jsdom');
     assert.equal(saved.bindings[0].name, 'Updated in another view');
     assert.equal(field.value, 'UNSAVED_DRAFT', 'a conflict must preserve the draft');
     assert.match(win.document.getElementById('save-error').textContent, /其他页面或设备/);
-    console.log(JSON.stringify({savedLengths: [16001, 32768], oversizedDraftPreserved: true, concurrentEditProtected: true, themes: ['light', 'dark'], saves}));
+    console.log(JSON.stringify({savedLengths: texts.map(x => x.length), longDraftPreserved: true, concurrentEditProtected: true, themes: ['light', 'dark'], saves}));
   } finally {win.dispatchEvent(new win.Event('pagehide')); dom.window.close();}
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -5,7 +5,6 @@ import {appendManagedText, cleanManagedText, readManagedText} from './managed-pr
 // Prompts/options remain local. No license lease or remote prompt service.
 const START = "<!-- KUPADESK-NATIVE-PAGE-TEST:BEGIN -->";
 const END = "<!-- KUPADESK-NATIVE-PAGE-TEST:END -->";
-const MAX_PROMPT_CHARS = 32768;
 
 function cleanContent(value) {
   if (value == null) return value;
@@ -137,7 +136,7 @@ export function onRequest(body, ctx) {
     if (!binding) { outcome(ctx, 'unbound'); return; }
     const prompt = binding.prompt;
     const role = binding.chatRole == null ? "auto" : binding.chatRole;
-    if (typeof prompt !== "string" || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS || prompt.includes(START) || prompt.includes(END) || !["auto", "system", "developer"].includes(role)) return reject("KupaDesk: invalid prompt binding.");
+    if (typeof prompt !== "string" || !prompt.trim() || prompt.includes(START) || prompt.includes(END) || !["auto", "system", "developer"].includes(role)) return reject("KupaDesk: invalid prompt binding.");
     if (!body || typeof body !== "object" || Array.isArray(body)) return reject("KupaDesk: invalid request body.");
     if (alreadyApplied(body, ctx.protocol, prompt, role, model)) { outcome(ctx, 'already'); return; }
     if (ctx.protocol === 'gemini' && body.systemInstruction && body.system_instruction) return reject('KupaDesk: request contains two conflicting system instruction fields.');

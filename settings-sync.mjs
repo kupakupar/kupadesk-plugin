@@ -4,7 +4,8 @@ import {createHash, createDecipheriv, pbkdf2, randomBytes} from 'node:crypto';
 import {promisify} from 'node:util';
 
 const derive=promisify(pbkdf2);
-const LIMIT=48*1024;
+const LIMIT=64*1024;
+const SAVE_SPEC='github:kupakupar/kupadesk-plugin';
 const object=x=>x&&typeof x==='object'&&!Array.isArray(x);
 const canonical=x=>JSON.stringify(sort(x));
 function sort(x){return Array.isArray(x)?x.map(sort):object(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,sort(x[k])])):x;}
@@ -65,7 +66,7 @@ export function mergeSettings(local={},remote={},base) {
     for(const m of b.models||[])used.add(m);
   }
   out.schemaVersion=1;out.bindings=bindings;
-  if(Buffer.byteLength(JSON.stringify(out))>LIMIT)throw Error('settings_merge_too_large');
+  if(Buffer.byteLength(JSON.stringify({spec:SAVE_SPEC,options:out}))>LIMIT)throw Error('settings_merge_too_large');
   return {options:out,conflicts};
 }
 

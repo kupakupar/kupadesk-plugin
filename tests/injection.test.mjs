@@ -138,10 +138,10 @@ test('replacing a Responses prompt cleans message items and preserves tool decla
   expect(next.body.instructions.split(START).length - 1).toBe(1);
 });
 
-test('length, duplicate bindings and malformed instructions are explicit errors', () => {
+test('long prompts remain valid; duplicate bindings and malformed instructions are explicit errors', () => {
   const body = chat('one/unique');
   expect(run(body, [binding(['one/unique'], 'x'.repeat(32768))]).error).toBeUndefined();
-  expect(run(body, [binding(['one/unique'], 'x'.repeat(32769))]).error?.status).toBe(400);
+  expect(run(body, [binding(['one/unique'], 'x'.repeat(32769))]).error).toBeUndefined();
   expect(run(body, [binding(['one/unique']), binding(['one/unique'], 'OTHER')]).error?.status).toBe(400);
   body.messages[0].content = 42;
   expect(run(body, [binding(['one/unique'])]).error?.status).toBe(400);

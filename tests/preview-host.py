@@ -93,7 +93,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path != '/api/options':
             return self.reply(404, b'{}')
         length = int(self.headers.get('Content-Length', '0'))
-        if length <= 0 or length > 48 * 1024:
+        if length <= 0 or length > 64 * 1024:
             return self.reply(413, b'{}')
         try:
             value = json.loads(self.rfile.read(length))

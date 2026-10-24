@@ -1,8 +1,8 @@
 'use strict';
-document.title = 'KupaDesk 016 · 独立预览';
-document.querySelector('header strong').textContent = 'KupaDesk 016 · 独立预览';
+document.title = 'KupaDesk 017 · 独立预览';
+document.querySelector('header strong').textContent = 'KupaDesk 017 · 独立预览';
 document.querySelector('header p').textContent = document.querySelector('meta[name="preview-data"]')?.content === 'synthetic'
-  ? '示例数据 · 仅供界面验收，不是你的真实请求' : '设置副本 · 不会写入现用 015';
+  ? '示例数据 · 仅供界面验收，不是你的真实请求' : '设置副本 · 不会写入现用 016';
 const frame = document.getElementById('plugin-preview');
 const themeControl = document.getElementById('preview-theme');
 const theme = () => ({dark: themeControl.value === 'dark', lang: 'zh-CN'});
@@ -18,6 +18,9 @@ window.addEventListener('message', async event => {
       if (!response.ok) throw Error('无法读取预览副本');
       result = await response.json();
     } else if (method === 'options.set') {
+      if (new TextEncoder().encode(JSON.stringify({spec: 'github:kupakupar/kupadesk-plugin', options: params.options})).length > 64 * 1024) {
+        throw Error('http: request body too large');
+      }
       const response = await fetch('/api/options', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Kupa-Preview': '1'}, body: JSON.stringify(params.options)});
       if (!response.ok) throw Error('无法保存预览副本');
       result = await response.json();
