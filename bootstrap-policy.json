@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "version": "0.0.20",
+  "sequence": 20,
+  "sha256": "5652b172350ca7815d71a83a82df4e58ce0cc44b7a485512a4b6de6b7691700a",
+  "files": [
+    "bootstrap-runtime.mjs",
+    "activation-ui.js",
+    "cloud.mjs",
+    "cloud-helper.mjs",
+    "managed-prompt.js",
+    "license.mjs",
+    "license-index.js",
+    "loader-worker.mjs",
+    "plugin-update.mjs",
+    "update-trust.mjs",
+    "package.json",
+    "middleware-entry.mjs",
+    "plugin-identity.mjs"
+  ]
+}

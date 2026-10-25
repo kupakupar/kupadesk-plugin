@@ -5,17 +5,19 @@ import {webcrypto,createHash,randomUUID} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
 import {pathToFileURL} from 'node:url';
 const TRUST={kid:'5adfe035daf51b95',publicKey:'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERAj6iK17hps+g9geH9eH7I2W8lpUJKFdMXI8WefJ1m0flTZ1giqZCg91DX7N16baUMghkr0vfrmpefHZr5O4cg=='};
-const HELPER_SHA256='8b362f1d2a18883a857977a84575ec7bdebcb049ad63f8cda547ba6f02d545f8';
-const FILES=new Set(['bootstrap-runtime.mjs','activation-ui.js','cloud.mjs','cloud-helper.mjs','managed-prompt.js','license.mjs','license-index.js','loader-worker.mjs','plugin-update.mjs','update-trust.mjs','package.json']);
+// Helper protocol/release policy is distinct from the private-runtime target.
+const POLICY=JSON.parse(await fs.readFile(new URL('./bootstrap-policy.json',import.meta.url),'utf8'));
 const sha=b=>createHash('sha256').update(b).digest('hex');
-export async function verifyBootstrap(value,trust=TRUST){
+export async function verifyBootstrap(value,trust=TRUST,policy=POLICY){
+ if(policy?.format!==1||!/^0\.\d+\.\d+$/.test(policy.version)||!Number.isSafeInteger(policy.sequence)||policy.sequence<1||!/^[a-f0-9]{64}$/.test(policy.sha256)||!Array.isArray(policy.files)||policy.files.length<1||policy.files.length>30)throw Error('bootstrap_policy');
+ const FILES=new Set(policy.files);if(FILES.size!==policy.files.length||[...FILES].some(p=>!/^[-a-z0-9]+\.(?:js|mjs|json)$/.test(p)))throw Error('bootstrap_policy');
  const s=value?.signature;
  if(!s||s.format!==1||s.alg!=='ES256'||s.kid!==trust.kid||typeof s.payload!=='string'||s.payload.length>4096)throw Error('bootstrap_signature');
  const key=await webcrypto.subtle.importKey('spki',Buffer.from(trust.publicKey,'base64'),{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
  if(!await webcrypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},key,Buffer.from(s.signature||'','base64'),Buffer.from('KupaDesk/receipt/v1\n'+s.payload)))throw Error('bootstrap_signature');
  const m=JSON.parse(s.payload),raw=Buffer.from(value.archive||'','base64');
- if(m.format!==1||m.audience!=='kupadesk-bootstrap'||m.purpose!=='activation-helper'||m.sequence!==20||m.version!=='0.0.20'||!Number.isSafeInteger(m.bytes)||m.bytes<1||raw.length!==m.bytes||raw.length>320*1024||sha(raw)!==m.sha256)throw Error('bootstrap_hash');
- if(trust.kid===TRUST.kid&&m.sha256!==HELPER_SHA256)throw Error('bootstrap_target');
+ if(m.format!==1||m.audience!=='kupadesk-bootstrap'||m.purpose!=='activation-helper'||m.sequence!==policy.sequence||m.version!==policy.version||!Number.isSafeInteger(m.bytes)||m.bytes<1||raw.length!==m.bytes||raw.length>320*1024||sha(raw)!==m.sha256)throw Error('bootstrap_hash');
+ if(trust.kid===TRUST.kid&&m.sha256!==policy.sha256)throw Error('bootstrap_target');
  const b=JSON.parse(gunzipSync(raw,{maxOutputLength:1024*1024}));
  if(b.format!==1||!Array.isArray(b.files)||b.files.length!==FILES.size)throw Error('bootstrap_files');
  const seen=new Set();let bytes=0;
