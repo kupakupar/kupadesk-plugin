@@ -5,7 +5,7 @@ import {webcrypto,createHash,randomUUID} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
 import {pathToFileURL} from 'node:url';
 const TRUST={kid:'5adfe035daf51b95',publicKey:'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERAj6iK17hps+g9geH9eH7I2W8lpUJKFdMXI8WefJ1m0flTZ1giqZCg91DX7N16baUMghkr0vfrmpefHZr5O4cg=='};
-const HELPER_SHA256='d4e0d537d7dbac14ff373cf6a46ac818796561222735ef9529c45601baeb893f';
+const HELPER_SHA256='8b362f1d2a18883a857977a84575ec7bdebcb049ad63f8cda547ba6f02d545f8';
 const FILES=new Set(['bootstrap-runtime.mjs','activation-ui.js','cloud.mjs','cloud-helper.mjs','managed-prompt.js','license.mjs','license-index.js','loader-worker.mjs','plugin-update.mjs','update-trust.mjs','package.json']);
 const sha=b=>createHash('sha256').update(b).digest('hex');
 export async function verifyBootstrap(value,trust=TRUST){

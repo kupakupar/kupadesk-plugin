@@ -7,6 +7,27 @@ import {startBootstrap} from './bootstrap.mjs';
 const shellDir=fileURLToPath(new URL('.',import.meta.url));
 const json=async file=>JSON.parse(await fs.readFile(file,'utf8'));
 let ready,activation,loaded;
+function followMiddleware(input,core){
+  let last,checking=false,stopped=false,warned=false;
+  async function refresh(){
+    if(stopped||checking)return;checking=true;
+    try{
+      const source=await localFile(shellDir,'.runtime','kupadesk.middleware.js');
+      const target=await localFile(shellDir,'kupadesk.middleware.js');
+      const stat=await fs.stat(source),stamp=stat.mtimeMs+':'+stat.size;
+      if(stamp===last)return;
+      // The host watches the public entry, not its imported private module.
+      // Reflect generated-index changes without touching plugin options.
+      if(await fs.readFile(target,'utf8')!=="export {onRequest} from './.runtime/kupadesk.middleware.js';\n")return;
+      const now=new Date();await fs.utimes(target,now,now);last=stamp;
+    }catch{
+      if(!warned){warned=true;try{void input?.client?.app?.log?.({body:{service:'kupadesk-loader',level:'warn',message:'middleware_freshness_unavailable'}})?.catch?.(()=>{});}catch{}}
+    }finally{checking=false;}
+  }
+  const timer=setInterval(()=>void refresh(),250);timer.unref?.();void refresh();
+  return {async onRequest(body,ctx){const result=await core.onRequest(body,ctx);await refresh();return result;},onResponse:core.onResponse,
+    stop(){stopped=true;clearInterval(timer);core.stop?.();}};
+}
 async function localFile(root,...parts) {
   let p=root;
   for(const part of parts) {
@@ -26,7 +47,8 @@ function loadRuntime(input,options,required,pointer,activationUrl){
     if(data.length>128*1024||createHash('sha256').update(data).digest('hex')!==pointer.entrySha256)throw Error('private_core_invalid');
     if(required.format!==1||!/^0\.\d+\.\d+$/.test(required.version)||!Number.isSafeInteger(required.sequence)||required.sequence<1)throw Error('loader_target_invalid');
     const module=await import(pathToFileURL(file).href);
-    return module.start({input:{...input,kupadeskActivationUrl:activationUrl},options,shellDir,required,pointer});
+    const core=await module.start({input:{...input,kupadeskActivationUrl:activationUrl},options,shellDir,required,pointer});
+    return followMiddleware(input,core);
   })();
   loaded={sha:pointer.sha256,promise};return promise;
 }
