@@ -2,10 +2,11 @@
   "format": 1,
   "version": "0.0.20",
   "sequence": 20,
-  "sha256": "689ab73bfd61ffdc4c75da50566ac54e91f3ccfb19767ce2413f5a8ce6f99ff4",
+  "sha256": "26d653a403ef4b3129a8ae2e1af997d6380392bbf4459af89c66046ad2e124a4",
   "files": [
     "bootstrap-runtime.mjs",
     "activation-ui.js",
+    "page-ready.js",
     "cloud.mjs",
     "cloud-helper.mjs",
     "managed-prompt.js",
