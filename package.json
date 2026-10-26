@@ -1,5 +1,5 @@
 {
-  "name":"kupadesk","version":"0.0.22","private":true,"type":"module","main":"./index.mjs",
+  "name":"kupadesk","version":"0.0.23","private":true,"type":"module","main":"./index.mjs",
   "description":"KupaDesk 更新入口：私有核心凭卡密加载。","kupadeskLoader":1,
   "files":["index.mjs","boot.mjs","bootstrap.mjs","bootstrap-policy.json","target.json","kupadesk.hooks.mjs","kupadesk.middleware.js","guard.js","page","README.md"],
   "magpie":{"middleware":"./kupadesk.middleware.js","hooks":"./kupadesk.hooks.mjs","page":{"title":"KupaDesk","file":"page/index.html"},"permissions":["usage:summary","providers:list"],"options":{"schemaVersion":1,"enabled":false,"cloud":{"requireLicense":true},"bindings":[]}}

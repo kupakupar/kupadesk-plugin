@@ -2,7 +2,7 @@
   "format": 1,
   "version": "0.0.20",
   "sequence": 20,
-  "sha256": "5652b172350ca7815d71a83a82df4e58ce0cc44b7a485512a4b6de6b7691700a",
+  "sha256": "689ab73bfd61ffdc4c75da50566ac54e91f3ccfb19767ce2413f5a8ce6f99ff4",
   "files": [
     "bootstrap-runtime.mjs",
     "activation-ui.js",
@@ -16,6 +16,7 @@
     "update-trust.mjs",
     "package.json",
     "middleware-entry.mjs",
-    "plugin-identity.mjs"
+    "plugin-identity.mjs",
+    "process-lock.mjs"
   ]
 }

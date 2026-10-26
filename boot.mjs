@@ -59,7 +59,7 @@ function startHelper(){
   if(activation||startingHelper)return startingHelper;
   clearTimeout(retryTimer);
   startingHelper=startBootstrap(context.input,shellDir,{onPrepared:(pointer,url)=>loadRuntime(pointer,url)})
-    .then(async helper=>{activation=helper;const core=loaded?await loaded.promise:null;core?.setActivationUrl?.(helper.url);})
+    .then(async helper=>{activation=helper;const core=loaded?await loaded.promise:null;await core?.setActivationUrl?.(helper.url);})
     .catch(()=>{warn('activation_helper_unavailable');retryTimer=setTimeout(()=>void startHelper(),3000);retryTimer.unref?.();})
     .finally(()=>{startingHelper=null;});
   return startingHelper;
