@@ -26,7 +26,7 @@ export async function verifyBootstrap(value,trust=TRUST,policy=POLICY){
 }
 async function atomic(file,data){await fs.mkdir(path.dirname(file),{recursive:true});const tmp=file+'.'+randomUUID();try{await fs.writeFile(tmp,data,{flag:'wx',mode:0o600});await fs.rename(tmp,file);}finally{await fs.unlink(tmp).catch(e=>{if(e.code!=='ENOENT')throw e;});}}
 async function noLinks(root,parts){let p=root;for(const part of parts){p=path.join(p,part);try{if((await fs.lstat(p)).isSymbolicLink())throw Error('bootstrap_symlink');}catch(e){if(e.code!=='ENOENT')throw e;}}}
-export async function startBootstrap(input,shellDir,{origin='https://kupakupa.vip',trust=TRUST,fetchImpl=fetch,native,coreTrust,onPrepared}={}){
+export async function startBootstrap(input,shellDir,{origin='https://kupakupa.vip',trust=TRUST,fetchImpl=fetch,native,coreTrust,onPrepared,onRestore}={}){
  const home=path.join(input.directory,'kupadesk-bootstrap');await noLinks(input.directory,['kupadesk-bootstrap']);
  let signed;
  try{signed=JSON.parse(await fs.readFile(path.join(home,'signed.json'),'utf8'));await verifyBootstrap(signed,trust);}
@@ -35,5 +35,5 @@ export async function startBootstrap(input,shellDir,{origin='https://kupakupa.vi
  await noLinks(home,[meta.sha256]);await fs.mkdir(folder,{recursive:true});
  for(const f of files){await noLinks(folder,[f.path]);const file=path.join(folder,f.path),b=Buffer.from(f.data,'base64');try{if(sha(await fs.readFile(file))===f.sha256)continue;}catch(e){if(e.code!=='ENOENT')throw e;}await atomic(file,b);}
  const helper=await import(pathToFileURL(path.join(folder,'bootstrap-runtime.mjs')).href);
- return helper.start({directory:input.directory,shellDir,required:JSON.parse(await fs.readFile(path.join(shellDir,'target.json'),'utf8')),origin,onPrepared,...(native?{native}:{}),...(coreTrust?{trust:coreTrust}:{})});
+ return helper.start({directory:input.directory,shellDir,required:JSON.parse(await fs.readFile(path.join(shellDir,'target.json'),'utf8')),origin,onPrepared,onRestore,...(native?{native}:{}),...(coreTrust?{trust:coreTrust}:{})});
 }

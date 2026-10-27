@@ -58,7 +58,10 @@ function loadRuntime(pointer,url){
 function startHelper(){
   if(activation||startingHelper)return startingHelper;
   clearTimeout(retryTimer);
-  startingHelper=startBootstrap(context.input,shellDir,{onPrepared:(pointer,url)=>loadRuntime(pointer,url)})
+  startingHelper=startBootstrap(context.input,shellDir,{onPrepared:(pointer,url)=>loadRuntime(pointer,url),onRestore:async(pointer,url)=>{
+    const core=await loadRuntime(pointer,url);if(typeof core.restoreAuthorization!=='function')throw Object.assign(Error('runtime_unavailable'),{code:'runtime_unavailable'});
+    await core.restoreAuthorization();
+  }})
     .then(async helper=>{activation=helper;const core=loaded?await loaded.promise:null;await core?.setActivationUrl?.(helper.url);})
     .catch(()=>{warn('activation_helper_unavailable');retryTimer=setTimeout(()=>void startHelper(),3000);retryTimer.unref?.();})
     .finally(()=>{startingHelper=null;});
