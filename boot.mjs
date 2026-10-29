@@ -4,6 +4,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {startBootstrap} from './bootstrap.mjs';
+import {ensureEntry,publishEntry} from './page-entry.mjs';
 
 const shellDir=fileURLToPath(new URL('.',import.meta.url));
 const json=async file=>JSON.parse(await fs.readFile(file,'utf8'));
@@ -58,11 +59,11 @@ function loadRuntime(pointer,url){
 function startHelper(){
   if(activation||startingHelper)return startingHelper;
   clearTimeout(retryTimer);
-  startingHelper=startBootstrap(context.input,shellDir,{onPrepared:(pointer,url)=>loadRuntime(pointer,url),onRestore:async(pointer,url)=>{
+  startingHelper=startBootstrap(context.input,shellDir,{onEndpoint:url=>publishEntry(shellDir,url),onPrepared:(pointer,url)=>loadRuntime(pointer,url),onRestore:async(pointer,url)=>{
     const core=await loadRuntime(pointer,url);if(typeof core.restoreAuthorization!=='function')throw Object.assign(Error('runtime_unavailable'),{code:'runtime_unavailable'});
     await core.restoreAuthorization();
   }})
-    .then(async helper=>{activation=helper;const core=loaded?await loaded.promise:null;await core?.setActivationUrl?.(helper.url);})
+    .then(async helper=>{activation=helper;await publishEntry(shellDir,helper.url);const core=loaded?await loaded.promise:null;await core?.setActivationUrl?.(helper.url);})
     .catch(()=>{warn('activation_helper_unavailable');retryTimer=setTimeout(()=>void startHelper(),3000);retryTimer.unref?.();})
     .finally(()=>{startingHelper=null;});
   return startingHelper;
@@ -71,6 +72,7 @@ export function initialize(input,options={}){
   context={input,options};
   initializing??=(async()=>{
     if(typeof input?.directory!=='string')throw Error('private_core_missing');
+    await ensureEntry(shellDir);
     required=await json(path.join(shellDir,'target.json'));
     if(required.format!==1||!/^0\.\d+\.\d+$/.test(required.version)||!Number.isSafeInteger(required.sequence)||required.sequence<1)throw Error('loader_target_invalid');
     // A verified local runtime must not depend on an optional UI service.
