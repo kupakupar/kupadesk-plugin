@@ -3,10 +3,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 
-export const ENTRY_FILE='entry-035.html',SCRIPT_FILE='entry-035.js';
-export const ENTRY_HTML='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KupaDesk</title><style>html{color-scheme:light dark}body{font:15px/1.7 system-ui;margin:0;padding:32px;color:CanvasText;background:Canvas}main{max-width:680px;margin:auto}button{font:inherit;padding:8px 16px}#detail{opacity:.75}</style><main><h1>KupaDesk</h1><p id="status" role="status">正在连接本机页面服务…</p><p id="detail">更新期间会自动重试，现有核心、绑定和设置不会被清空。</p><button id="retry" type="button">立即重试</button></main><script src="entry-035.js"></script></html>\n';
+export const ENTRY_FILE='entry-036.html',SCRIPT_FILE='entry-036.js';
+const PAGE='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KupaDesk</title><style>html{color-scheme:light dark}body{font:15px/1.7 system-ui;margin:0;padding:32px;color:CanvasText;background:Canvas}main{max-width:680px;margin:auto}button,a{font:inherit}button{padding:8px 16px}#detail{opacity:.75}</style>';
+export const ENTRY_HTML=PAGE+'<main><h1>KupaDesk</h1><p id="status" role="status">本机页面服务正在准备。</p><p id="detail">若停留在此页，请稍后点击 Magpie 顶部刷新，再打开 KupaDesk。现有核心、绑定和设置不会被清空。</p><button id="retry" type="button" hidden>重试连接</button></main><script src="entry-036.js"></script></html>\n';
+function validView(url){const m=typeof url==='string'&&/^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})\/kupa-activate\/[a-f0-9]{64}\/view$/.exec(url);return !!m&&Number(m[1])<=65535;}
+export function readyHTML(url){
+ if(!validView(url))throw Error('page_entry_url');
+ // Navigation works in the native opaque sandbox, where Wails virtual-host
+ // subresources cannot be loaded. Do not depend on entry JS for this hop.
+ return PAGE+'<meta http-equiv="refresh" content="0;url='+url+'"><main><h1>KupaDesk</h1><p role="status">正在打开 KupaDesk…</p><p><a href="'+url+'">打开 KupaDesk</a></p><p id="detail">若未打开，请使用 Magpie 顶部刷新。</p></main></html>\n';
+}
 export const ENTRY_SCRIPT=String.raw`(() => {
   const status=document.getElementById('status'),retry=document.getElementById('retry');
+  retry.hidden=false;
   let timer,busy=false,stopped=false,attempts=0,script,cancelLoad;
   parent.postMessage({magpie:1,id:'kupa-entry-ready',method:'hello'},'*');
   function readConnection(){
@@ -21,9 +30,9 @@ export const ENTRY_SCRIPT=String.raw`(() => {
   async function connect(){
     if(stopped||busy)return;busy=true;
     try{
-      // Magpie 1883 forbids fetch but permits this page's own scripts.
+      // Web-mode fallback only. Native startup uses the prepared HTML hop.
       const value=await readConnection(),url=value?.url;
-      if(value?.format!==1||value.entry!==35||typeof url!=='string'||!/^http:\/\/127\.0\.0\.1:\d{1,5}\/kupa-activate\/[a-f0-9]{64}\/view$/.test(url)||Number(new URL(url).port)<1||Number(new URL(url).port)>65535)throw Error('invalid');
+      if(value?.format!==1||value.entry!==36||typeof url!=='string'||!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}\/kupa-activate\/[a-f0-9]{64}\/view$/.test(url)||Number(new URL(url).port)>65535)throw Error('invalid');
       if(stopped)return;location.replace(url);stopped=true;
     }catch{
       attempts++;status.textContent=attempts<5?'本机页面正在准备，完成后会自动打开。':'本机页面服务尚未就绪，正在继续重试。';
@@ -53,20 +62,38 @@ async function put(file,text){
  finally{await fs.unlink(temp).catch(e=>{if(e.code!=='ENOENT')throw e;});}
 }
 let lastCleanup=0;
-export async function ensureEntry(shellDir){
+const queues=new Map();
+function serialized(shellDir,fn){
+ const key=path.resolve(shellDir),prev=queues.get(key)||Promise.resolve();
+ const next=prev.catch(()=>{}).then(fn);queues.set(key,next);
+ void next.finally(()=>{if(queues.get(key)===next)queues.delete(key);}).catch(()=>{});
+ return next;
+}
+async function savedView(dir){
+ const file=path.join(dir,'connection.js'),st=await fs.lstat(file).catch(e=>{if(e.code==='ENOENT')return null;throw e;});
+ if(!st)return null;
+ if(!st.isFile()||st.isSymbolicLink())throw Error('page_entry_path');
+ if(st.size>1024)return null;
+ const text=await fs.readFile(file,'utf8'),match=/^window\.KUPADESK_CONNECTION = (\{[^\r\n]+\});\r?\n?$/.exec(text);
+ try{const value=JSON.parse(match?.[1]||'null');return value?.format===1&&[35,36].includes(value.entry)&&validView(value.url)?value.url:null;}catch{return null;}
+}
+async function ensure(shellDir,url){
  const dir=await directory(shellDir);
- await put(path.join(dir,SCRIPT_FILE),ENTRY_SCRIPT);await put(path.join(dir,ENTRY_FILE),ENTRY_HTML);
+ const view=url||await savedView(dir);
+ if(view)await put(path.join(dir,'connection.js'),'window.KUPADESK_CONNECTION = '+JSON.stringify({format:1,entry:36,url:view})+';\n');
+ await put(path.join(dir,SCRIPT_FILE),ENTRY_SCRIPT);await put(path.join(dir,ENTRY_FILE),view?readyHTML(view):ENTRY_HTML);
  if(Date.now()-lastCleanup>3600000){
   lastCleanup=Date.now();
   for(const name of await fs.readdir(dir)){
-   if(!/^(?:index\.html|activate\.html|activate\.js|entry-035\.(?:html|js)|connection\.js)\.tmp-[a-f0-9-]{36}$/.test(name))continue;
+   if(!/^(?:index\.html|activate\.html|activate\.js|entry-03[56]\.(?:html|js)|connection\.js)\.tmp-[a-f0-9-]{36}$/.test(name))continue;
    const f=path.join(dir,name),st=await fs.lstat(f).catch(e=>{if(e.code==='ENOENT')return null;throw e;});
    if(st?.isFile()&&!st.isSymbolicLink()&&Date.now()-st.mtimeMs>86400000)await fs.unlink(f).catch(e=>{if(e.code!=='ENOENT')throw e;});
   }
  }
 }
+export function ensureEntry(shellDir){return serialized(shellDir,()=>ensure(shellDir));}
 export async function publishEntry(shellDir,url){
- if(!/^http:\/\/127\.0\.0\.1:\d{1,5}\/kupa-activate\/[a-f0-9]{64}\/page$/.test(url||''))throw Error('page_entry_url');
- await ensureEntry(shellDir);
- await put(path.join(shellDir,'page/connection.js'),'window.KUPADESK_CONNECTION = '+JSON.stringify({format:1,entry:35,url:url.replace(/\/page$/,'/view')})+';\n');
+ if(typeof url!=='string'||!url.endsWith('/page'))throw Error('page_entry_url');
+ const view=url.replace(/\/page$/,'/view');if(!validView(view))throw Error('page_entry_url');
+ return serialized(shellDir,()=>ensure(shellDir,view));
 }

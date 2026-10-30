@@ -20,7 +20,7 @@ github:kupakupar/kupadesk-plugin
 
 ## 更新
 
-在 **插件 → 已安装** 中单独更新 KupaDesk，完成后使用 Magpie 顶部刷新，再打开 KupaDesk。准备期间页面会自动重试；以运行版本和状态为准。
+在 **插件 → 已安装** 中单独更新 KupaDesk，完成后使用 Magpie 顶部刷新，再打开 KupaDesk。首次准备若仍停留在连接页，请稍后再使用顶部刷新；以运行版本和状态为准。
 
 ## 使用说明
 

@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.35",
+  "version": "0.0.36",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -24,7 +24,7 @@
     "hooks": "./kupadesk.hooks.mjs",
     "page": {
       "title": "KupaDesk",
-      "file": "page/entry-035.html",
+      "file": "page/entry-036.html",
       "icon": "page/kupadesk-icon.svg"
     },
     "permissions": [
