@@ -2,7 +2,7 @@
   "format": 1,
   "version": "0.0.20",
   "sequence": 20,
-  "sha256": "c9a62f72e26168d9734005f08707e1ed6219cc1a1355bcb4c2ab37931b6e33e0",
+  "sha256": "6adfe55f614305e2a4dcda4e02b73df236ab80998086275cc392e5cf7634b222",
   "files": [
     "bootstrap-runtime.mjs",
     "activation-ui.js",
