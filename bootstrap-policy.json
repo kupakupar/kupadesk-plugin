@@ -2,8 +2,10 @@
   "format": 1,
   "version": "0.0.20",
   "sequence": 20,
-  "sha256": "feabf2e4e6abc819c96bda877601aca50d7d03f2db030324cb3b8ca2256c944a",
+  "sha256": "588a6fae2b2b2684c14a09500afb996e940589b7511d4f43f813fb0ef555af04",
   "files": [
+    "ui-chrome.mjs",
+    "ui-pages.mjs",
     "bootstrap-runtime.mjs",
     "activation-ui.js",
     "page-ready.js",

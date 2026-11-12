@@ -1,3 +1,4 @@
+(()=>{const id='kupa-surface-theme-'+Math.random().toString(36).slice(2);function paint(t){if(!t||typeof t.dark!=='boolean')return;document.documentElement.dataset.theme=t.dark?'dark':'light';for(const [k,v]of Object.entries(t.tokens||{}))if(['bg','card','fg','fg-2','muted','faint','line','accent','accent-soft','accent-fg','green','red','amber','font','code'].includes(k)&&typeof v==='string'&&v.length<300)document.documentElement.style.setProperty('--magpie-'+k,v);}addEventListener('message',e=>{if(e.source!==parent||e.data?.magpie!==1)return;const m=e.data;if(m.event==='theme')paint(m.data);else if(m.id===id)paint(m.result);});if(parent!==window)parent.postMessage({magpie:1,id,method:'hello'},'*');})();
 (() => {
   const status=document.getElementById('status'),retry=document.getElementById('retry');
   retry.hidden=false;
@@ -20,7 +21,7 @@
       if(value?.format!==1||value.entry!==36||typeof url!=='string'||!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}\/kupa-activate\/[a-f0-9]{64}\/view$/.test(url)||Number(new URL(url).port)>65535)throw Error('invalid');
       if(stopped)return;location.replace(url);stopped=true;
     }catch{
-      attempts++;status.textContent=attempts<5?'本机页面正在准备，完成后会自动打开。':'本机页面服务尚未就绪，正在继续重试。';
+      attempts++;status.textContent=attempts<5?'\u672C\u673A\u9875\u9762\u6B63\u5728\u51C6\u5907\uFF0C\u5B8C\u6210\u540E\u4F1A\u81EA\u52A8\u6253\u5F00\u3002':'\u672C\u673A\u9875\u9762\u670D\u52A1\u5C1A\u672A\u5C31\u7EEA\uFF0C\u6B63\u5728\u7EE7\u7EED\u91CD\u8BD5\u3002';
     }finally{
       busy=false;clearTimeout(timer);if(!stopped)timer=setTimeout(connect,1500);
     }

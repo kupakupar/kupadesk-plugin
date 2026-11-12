@@ -2,18 +2,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {chromePage,THEME_SCRIPT} from './ui-chrome.mjs';
 
 export const ENTRY_FILE='entry-036.html',SCRIPT_FILE='entry-036.js';
-const PAGE='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KupaDesk</title><style>html{color-scheme:light dark}body{font:15px/1.7 system-ui;margin:0;padding:32px;color:CanvasText;background:Canvas}main{max-width:680px;margin:auto}button,a{font:inherit}button{padding:8px 16px}#detail{opacity:.75}</style>';
-export const ENTRY_HTML=PAGE+'<main><h1>KupaDesk</h1><p id="status" role="status">本机页面服务正在准备。</p><p id="detail">若停留在此页，请稍后点击 Magpie 顶部刷新，再打开 KupaDesk。现有核心、绑定和设置不会被清空。</p><button id="retry" type="button" hidden>重试连接</button></main><script src="entry-036.js"></script></html>\n';
+export const ENTRY_HTML=chromePage({subtitle:'正在连接本机页面',content:'<h2>正在准备 KupaDesk</h2><p id="status" class="kupa-status" role="status" aria-live="polite">本机页面服务正在准备。</p><p id="detail" class="field-help">若停留在此页，请稍后点击 Magpie 顶部刷新，再打开 KupaDesk。现有核心、绑定和设置不会被清空。</p><div class="kupa-actions"><button class="button button-primary" id="retry" type="button" hidden>重试连接</button></div>',script:'entry-036.js'})+'\n';
 function validView(url){const m=typeof url==='string'&&/^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})\/kupa-activate\/[a-f0-9]{64}\/view$/.exec(url);return !!m&&Number(m[1])<=65535;}
 export function readyHTML(url){
  if(!validView(url))throw Error('page_entry_url');
  // Navigation works in the native opaque sandbox, where Wails virtual-host
  // subresources cannot be loaded. Do not depend on entry JS for this hop.
- return PAGE+'<meta http-equiv="refresh" content="0;url='+url+'"><main><h1>KupaDesk</h1><p role="status">正在打开 KupaDesk…</p><p><a href="'+url+'">打开 KupaDesk</a></p><p id="detail">若未打开，请使用 Magpie 顶部刷新。</p></main></html>\n';
+ return chromePage({head:'<meta http-equiv="refresh" content="0;url='+url+'">',subtitle:'正在进入核心库',content:'<h2>准备就绪</h2><p class="kupa-status" role="status">正在打开 KupaDesk…</p><div class="kupa-actions"><a class="button button-primary" href="'+url+'">打开 KupaDesk</a></div><p id="detail" class="field-help">若未打开，请使用 Magpie 顶部刷新。</p>'})+'\n';
 }
-export const ENTRY_SCRIPT=String.raw`(() => {
+export const ENTRY_SCRIPT=THEME_SCRIPT+'\n'+String.raw`(() => {
   const status=document.getElementById('status'),retry=document.getElementById('retry');
   retry.hidden=false;
   let timer,busy=false,stopped=false,attempts=0,script,cancelLoad;
