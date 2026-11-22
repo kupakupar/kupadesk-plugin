@@ -1,6 +1,6 @@
 {
   "name": "kupadesk",
-  "version": "0.0.43",
+  "version": "0.0.44",
   "private": true,
   "type": "module",
   "main": "./index.mjs",
@@ -17,6 +17,7 @@
     "kupadesk.hooks.mjs",
     "kupadesk.middleware.js",
     "guard.js",
+    "guard-index.js",
     "page",
     "README.md"
   ],

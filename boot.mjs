@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {startBootstrap} from './bootstrap.mjs';
 import {ensureEntry,publishEntry} from './page-entry.mjs';
+import {onRequest as pendingRequest} from './guard.js';
 
 const shellDir=fileURLToPath(new URL('.',import.meta.url));
 const json=async file=>JSON.parse(await fs.readFile(file,'utf8'));
@@ -93,5 +94,9 @@ async function runtime(){
   // Absence is cached. Preparation callbacks or a host reload supply the core.
   return initialize(context.input,context.options);
 }
-export async function request(body,ctx){const core=await runtime();return core?core.onRequest(body,ctx):body;}
+export async function request(body,ctx){
+  let core;
+  try{core=await runtime();}catch{warn('private_core_unavailable');}
+  return core?core.onRequest(body,ctx):pendingRequest(body,{...ctx,options:ctx?.options??context?.options});
+}
 export async function response(body,ctx){const core=await runtime();return core?.onResponse?.(body,ctx);}
