@@ -2,6 +2,11 @@
 
 按版本倒序记录主要变化。以下版本号描述对应发布时的状态；安装与使用请看 [README](https://github.com/kupakupar/kupadesk-plugin#readme)。
 
+## 0.0.45
+
+- Codex 可手动切换到插件的本机转发入口，沿用当前 Magpie 网关和原会话。入口地址只保存在本机 Magpie 配置目录的 `kupadesk-runtime/codex-relay-url.txt`，请勿分享。
+- 区分宿主 32 MiB 回传限制、正文准备和授权状态。私有核心初始化在后台进行。
+
 ## 0.0.44
 
 - 启动与核心修复期间按模型和 Agent 区分等待、放行。发给模型的指令只包含配置的正文，保留旧版格式的读取兼容。
