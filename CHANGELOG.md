@@ -2,9 +2,14 @@
 
 按版本倒序记录主要变化。以下版本号描述对应发布时的状态；安装与使用请看 [README](https://github.com/kupakupar/kupadesk-plugin#readme)。
 
+## 0.0.46
+
+- 请求诊断列表用“回传超限”标记 32 MiB 回传限制，完整原因在选中记录后显示。
+- 撤销 045 的 Codex 本机转发入口，沿用 Magpie 原网关，保留后台初始化和超限提示。
+
 ## 0.0.45
 
-- Codex 可手动切换到插件的本机转发入口，沿用当前 Magpie 网关和原会话。入口地址只保存在本机 Magpie 配置目录的 `kupadesk-runtime/codex-relay-url.txt`，请勿分享。
+- 新增可选的 Codex 本机转发入口，该入口已于 046 撤销。
 - 区分宿主 32 MiB 回传限制、正文准备和授权状态。私有核心初始化在后台进行。
 
 ## 0.0.44

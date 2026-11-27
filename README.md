@@ -27,7 +27,7 @@ github:kupakupar/kupadesk-plugin
 - 本机和云端核心均需要有效授权；需要恢复时，从「云端」进入恢复授权。
 - 授权有效即可查看云端核心列表；「下载并使用云端正文」只控制已绑定核心的正文获取与使用。
 - 自定义壁纸仅保存在当前电脑，其他电脑缺少图片时使用默认壁纸。
-- Codex 长会话可手动使用本机转发。运行核心就绪后，从 Magpie 配置目录的 `kupadesk-runtime/codex-relay-url.txt` 复制整行，替换 Codex 原来的 `…/backend-api/codex` 基础地址，继续打开原会话。保留原地址以便切回，转发地址只供本机使用，请勿分享。
+- Codex 沿用 Magpie 网关。曾在 045 手动切换到 KupaDesk 转发地址的用户，请将 `openai_base_url` 恢复为原来的 Magpie 地址。
 - 此仓库提供更新入口，运行核心在授权后下载；无需替换 Magpie 官方程序。
 
 [查看更新日志](https://github.com/kupakupar/kupadesk-plugin/blob/main/CHANGELOG.md)
