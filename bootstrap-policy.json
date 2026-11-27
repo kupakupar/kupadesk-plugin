@@ -2,7 +2,7 @@
   "format": 1,
   "version": "0.0.20",
   "sequence": 20,
-  "sha256": "31ecc373feef440fd1693e40340ecc39bf0385f1854d48988cefc82d631d4bb7",
+  "sha256": "f1c8e1f7b30a9c3827fcf19da4f97a588609e5f3a1d1c8bba10e33873e3b38e2",
   "files": [
     "ui-chrome.mjs",
     "ui-pages.mjs",
